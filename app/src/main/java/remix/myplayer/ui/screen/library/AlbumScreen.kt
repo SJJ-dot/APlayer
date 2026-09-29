@@ -17,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import remix.myplayer.R
@@ -79,9 +80,10 @@ fun AlbumScreen() {
           ListItem(
             modifier = Modifier.height(64.dp),
             model = album,
-            text1 = album.album,
+            text1 = album.album.ifBlank { stringResource(R.string.unknown_album) },
             text2 = pluralStringResource(
-              R.plurals.song_num_1, album.count, album.artist,
+              R.plurals.song_num_1, album.count,
+              album.artist.ifBlank { stringResource(R.string.unknown_artist) },
               album.count
             ),
             selected = selectedIds.contains(album.getKey()),
@@ -111,7 +113,9 @@ fun AlbumScreen() {
             it.albumID
           }) { album ->
             GridItem(
-              album, album.album, album.artist,
+              album,
+              album.album.ifBlank { stringResource(R.string.unknown_album) },
+              album.artist.ifBlank { stringResource(R.string.unknown_artist) },
               selected = selectedIds.contains(album.getKey()),
               popupEnabled = popupEnabled,
               onClick = {

@@ -23,6 +23,8 @@ import remix.myplayer.repo.SmbRepository
 import remix.myplayer.repo.SongRepoImpl
 import remix.myplayer.repo.SongRepository
 import remix.myplayer.repo.WebDavRepository
+import remix.myplayer.repo.SourceRepository
+import remix.myplayer.repo.SourceRepoImpl
 import javax.inject.Singleton
 
 @InstallIn(SingletonComponent::class)
@@ -67,4 +69,8 @@ abstract class RepositoryModule {
   @Singleton
   @Binds
   abstract fun bindSmbRepo(repo: SmbRepoImpl): SmbRepository
+
+  @Singleton
+  @Binds
+  abstract fun bindSourceRepo(repo: SourceRepoImpl): SourceRepository
 }

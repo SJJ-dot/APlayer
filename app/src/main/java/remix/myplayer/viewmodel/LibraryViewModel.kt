@@ -30,6 +30,9 @@ import remix.myplayer.data.model.audio.Genre
 import remix.myplayer.data.model.audio.Song
 import remix.myplayer.data.prefs.SettingPrefs
 import remix.myplayer.glide.UriFetcher
+import remix.myplayer.helper.ItemsSorter
+import remix.myplayer.helper.RemoteModelAggregator
+import remix.myplayer.helper.SortOrder
 import remix.myplayer.repo.AlbumRepository
 import remix.myplayer.repo.ArtistRepository
 import remix.myplayer.repo.FolderRepository
@@ -37,6 +40,7 @@ import remix.myplayer.repo.GenreRepository
 import remix.myplayer.repo.HistoryRepository
 import remix.myplayer.repo.PlayListRepository
 import remix.myplayer.repo.SongRepository
+import remix.myplayer.repo.UnifiedLibraryRepository
 import remix.myplayer.repo.usecase.ExportPlayListUseCase
 import remix.myplayer.repo.usecase.PlayFromUriUseCase
 import remix.myplayer.service.MusicEventCallback
@@ -62,7 +66,8 @@ class LibraryViewModel @Inject constructor(
   private val historyRepo: HistoryRepository,
   val settingPrefs: SettingPrefs,
   private val exportPlayListUseCase: ExportPlayListUseCase,
-  private val playFromUriUseCase: PlayFromUriUseCase
+  private val playFromUriUseCase: PlayFromUriUseCase,
+  private val unifiedLibraryRepository: UnifiedLibraryRepository
 ) : ViewModel(), MusicEventCallback {
 
   private var hasPermission = false
@@ -84,6 +89,10 @@ class LibraryViewModel @Inject constructor(
 
   private val _folders = MutableStateFlow<List<Folder>>(emptyList())
   val folders: StateFlow<List<Folder>> = _folders.asStateFlow()
+
+  /** 远程曲库刷新中（供下拉刷新显示进度） */
+  private val _refreshing = MutableStateFlow(false)
+  val refreshing: StateFlow<Boolean> = _refreshing.asStateFlow()
 
   val historySongs = historyRepo.allHistories().map { histories ->
     histories.mapNotNull { history ->
@@ -209,7 +218,9 @@ class LibraryViewModel @Inject constructor(
     clear: Boolean = false,
     updateAlbumVersion: Boolean = false,
     updateArtistVersion: Boolean = false,
-    updatePlayListVersion: Boolean = false
+    updatePlayListVersion: Boolean = false,
+    /** 是否在后台重新枚举远程音源；排序等只需重排的场景传 false，避免无谓加载 */
+    refreshRemote: Boolean = true
   ) {
     viewModelScope.launch {
       if (clear) {
@@ -226,13 +237,93 @@ class LibraryViewModel @Inject constructor(
         Glide.get(context).clearMemory()
       }
 
-      _songs.value = async(Dispatchers.IO) { songRepo.allSongs() }.await()
-      _albums.value = async(Dispatchers.IO) { albumRepo.allAlbums() }.await()
-      _artists.value = async(Dispatchers.IO) { artistRepo.allArtists() }.await()
-      _genres.value = async(Dispatchers.IO) { genreRepo.allGenres() }.await()
-      _folders.value = async(Dispatchers.IO) { folderRepo.allFolders() }.await()
+      // 1. 先加载并显示本地歌曲 + 缓存的远程歌曲（均不触网，启动即见）
+      val localSongs = async(Dispatchers.IO) { unifiedLibraryRepository.localSongs() }.await()
+      val cachedRemote = async(Dispatchers.IO) { unifiedLibraryRepository.remoteSongs() }.await()
+      _songs.value = async(Dispatchers.IO) { mergeSongs(localSongs, cachedRemote) }.await()
+
+      // 本地聚合视图（MediaStore）；本地音乐被禁用时不读取本地聚合
+      val localMusicEnabled = settingPrefs.localMusicEnabled
+      val localAlbums =
+        if (localMusicEnabled) async(Dispatchers.IO) { albumRepo.allAlbums() }.await() else emptyList()
+      val localArtists =
+        if (localMusicEnabled) async(Dispatchers.IO) { artistRepo.allArtists() }.await() else emptyList()
+      val localGenres =
+        if (localMusicEnabled) async(Dispatchers.IO) { genreRepo.allGenres() }.await() else emptyList()
+      applyRemoteAggregation(cachedRemote, localAlbums, localArtists, localGenres)
+
+      // 2. 后台增量刷新远程歌曲（仅检查变化并补齐新文件/元数据），完成后合并刷新
+      if (refreshRemote) {
+        viewModelScope.launch(Dispatchers.IO) {
+          _refreshing.value = true
+          try {
+            val remoteSongs = async(Dispatchers.IO) { unifiedLibraryRepository.refreshRemote() }.await()
+            _songs.value = mergeSongs(_songs.value.filter { it.isLocal() }, remoteSongs)
+            applyRemoteAggregation(remoteSongs, localAlbums, localArtists, localGenres)
+          } finally {
+            _refreshing.value = false
+          }
+        }
+      }
+
+      _folders.value =
+        if (localMusicEnabled) async(Dispatchers.IO) { folderRepo.allFolders() }.await() else emptyList()
       Timber.v("songCount: ${_songs.value.size} albumCount: ${_albums.value.size} artistCount: ${_artists.value.size} genreCount: ${_genres.value.size} folderCount: ${_folders.value.size}")
     }
+  }
+
+  /**
+   * 合并本地与远程歌曲并**整体排序**（不区分来源）：
+   * 合并后全量在内存中按当前排序方式统一排序，因此本地与远程会按同一规则混排，
+   * 而不是本地在前、远程追加在末尾。调用方需在 IO 线程执行（全量排序有一定开销）。
+   */
+  private fun mergeSongs(local: List<Song>, remote: List<Song>): List<Song> =
+    sortSongs((local + remote).distinctBy { if (it.isLocal()) it.data else it.id })
+
+  /** 按当前排序方式整体排序（本地与远程同一规则） */
+  private fun sortSongs(songs: List<Song>): List<Song> =
+    when (val sortOrder = settingPrefs.songSortOrder) {
+      // 以下几种 ItemsSorter 不排序（原本依赖数据库查询顺序），这里给出统一规则
+      SortOrder.DATE -> songs.sortedBy { it.dateModified }
+      SortOrder.DATE_DESC -> songs.sortedByDescending { it.dateModified }
+      SortOrder.TRACK_NUMBER -> songs.sortedBy { trackNumberOf(it) }
+      else -> ItemsSorter.sortedSongs(songs, sortOrder)
+    }
+
+  /**
+   * 切换排序方式时专用：只把已加载的歌曲按新排序方式重排，
+   * **不重新查询 MediaStore、不重新枚举远程音源**（避免排序时反复加载/转圈）。
+   */
+  fun resortSongs() = viewModelScope.launch {
+    val current = _songs.value
+    if (current.size > 1) {
+      _songs.value = withContext(Dispatchers.IO) { sortSongs(current) }
+    }
+  }
+
+  /** 音轨号："3/12" → 3；无轨号排到最后 */
+  private fun trackNumberOf(song: Song): Int =
+    song.track?.substringBefore('/')?.trim()?.toIntOrNull() ?: Int.MAX_VALUE
+
+  /**
+   * 把远程歌曲聚合进专辑 / 歌手 / 流派视图：远程按名称聚合（稳定负 id），
+   * 与本地结果合并后按当前排序方式统一排序。
+   */
+  private fun applyRemoteAggregation(
+    remoteSongs: List<Song>,
+    localAlbums: List<Album>,
+    localArtists: List<Artist>,
+    localGenres: List<Genre>
+  ) {
+    _albums.value = ItemsSorter.sortedAlbums(
+      localAlbums + RemoteModelAggregator.albums(remoteSongs), settingPrefs.albumSortOrder
+    )
+    _artists.value = ItemsSorter.sortedArtists(
+      localArtists + RemoteModelAggregator.artists(remoteSongs), settingPrefs.artistSortOrder
+    )
+    _genres.value = ItemsSorter.sortedGenres(
+      localGenres + RemoteModelAggregator.genres(remoteSongs), settingPrefs.genreSortOrder
+    )
   }
 
   fun clearHistory() = viewModelScope.launch {
@@ -240,7 +331,8 @@ class LibraryViewModel @Inject constructor(
   }
 
   override fun onMediaStoreChanged() {
-    if (hasPermission) {
+    // 本地音乐被禁用或关闭「自动扫描」时，不再自动刷新曲库（手动扫描会显式刷新）
+    if (hasPermission && settingPrefs.autoScanLocal && settingPrefs.localMusicEnabled) {
       fetchMedia()
     }
   }

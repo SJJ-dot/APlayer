@@ -1,6 +1,8 @@
 package remix.myplayer.ui.screen.smb
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,9 +14,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,7 +34,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import remix.myplayer.R
@@ -39,6 +47,8 @@ import remix.myplayer.data.model.smb.SmbFile
 import remix.myplayer.service.Command
 import remix.myplayer.service.MusicService
 import remix.myplayer.service.MusicServiceRemote
+import remix.myplayer.ui.dialog.NormalDialog
+import remix.myplayer.ui.dialog.rememberDialogState
 import remix.myplayer.ui.dialog.runWithLoading
 import remix.myplayer.ui.nav.LocalNavController
 import remix.myplayer.ui.nav.MessageNotifier
@@ -54,17 +64,21 @@ import remix.myplayer.ui.widget.common.TextSecondary
 import remix.myplayer.util.MusicUtil
 import remix.myplayer.util.Util
 import remix.myplayer.util.ext.clickWithRipple
+import remix.myplayer.util.ext.clickableWithoutRipple
+import remix.myplayer.viewmodel.libraryViewModel
 import remix.myplayer.viewmodel.playbackViewModel
 import remix.myplayer.viewmodel.settingViewModel
 import remix.myplayer.viewmodel.smbViewModel
 import timber.log.Timber
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SmbDetailScreen(smb: Smb) {
+fun SmbDetailScreen(smb: Smb, pickMode: Boolean = false) {
   val nav = LocalNavController.current
   val smbVM = smbViewModel
   val playbackVM = playbackViewModel
   val settingVM = settingViewModel
+  val libraryVM = libraryViewModel
   val scope = rememberCoroutineScope()
   val resourceState by smbVM.smbResState.collectAsStateWithLifecycle()
 
@@ -82,6 +96,21 @@ fun SmbDetailScreen(smb: Smb) {
   }
   var refreshTrigger by remember {
     mutableIntStateOf(0)
+  }
+  // 下拉刷新中
+  var refreshing by remember {
+    mutableStateOf(false)
+  }
+
+  // 删除二次确认
+  val deleteDialogState = rememberDialogState()
+  var pendingDelete by remember { mutableStateOf<SmbFile?>(null) }
+
+  // 离开页面时重置加载状态，避免下次进入读到残留 Error 而立即退出（白屏）
+  DisposableEffect(smb.id) {
+    onDispose {
+      smbVM.clearResState()
+    }
   }
 
   fun handleBack() {
@@ -115,13 +144,16 @@ fun SmbDetailScreen(smb: Smb) {
     LaunchedEffect(resourceState) {
       when (resourceState) {
         is DataUiState.Success -> {
+          refreshing = false
           smbFiles = resourceState.get()
           smbVM.updateLastUrl(smb, currentUrl)
         }
 
         is DataUiState.Error -> {
+          refreshing = false
           val ex = (resourceState as DataUiState.Error).throwable
           if (ex is SmbException && ex.isNotFound) {
+            // 路径确实不存在：回退到根目录或退出
             if (pathStack.size <= 1) {
               nav.popBackStack()
               MessageNotifier.show(R.string.load_failed)
@@ -130,8 +162,8 @@ fun SmbDetailScreen(smb: Smb) {
               MessageNotifier.show(R.string.file_not_exist)
             }
           } else {
-            nav.popBackStack()
-            MessageNotifier.show(R.string.load_failed)
+            // 弱网 / 超时 / 认证失败等：留在当前页面，下拉可重试，不再直接退出
+            MessageNotifier.show(R.string.load_failed_retry)
           }
         }
 
@@ -141,6 +173,14 @@ fun SmbDetailScreen(smb: Smb) {
 
     Column(modifier = Modifier.padding(contentPadding)) {
       Box(modifier = Modifier.weight(1f)) {
+        PullToRefreshBox(
+          isRefreshing = refreshing,
+          onRefresh = {
+            refreshing = true
+            refreshTrigger++
+          },
+          modifier = Modifier.fillMaxSize()
+        ) {
         LazyColumn(modifier = Modifier.fillMaxSize()) {
           items(smbFiles, key = { it.path }) { resource ->
             SmbDetailItem(
@@ -154,8 +194,8 @@ fun SmbDetailScreen(smb: Smb) {
                     smb.getRoot().removeSuffix("/") + "/" + resource.path.trimStart('/')
                   Timber.v("nextPath: $nextPath")
                   pathStack.add(nextPath)
-                } else {
-                  // Filter music and play
+                } else if (!pickMode) {
+                  // 选目录模式下不播放；Filter music and play
                   if (smbFiles.isEmpty()) {
                     return@SmbDetailItem
                   }
@@ -221,11 +261,17 @@ fun SmbDetailScreen(smb: Smb) {
                       settingVM.showSongDetailDialog(song)
                     }
                   }
+
+                  R.string.delete -> {
+                    pendingDelete = resource
+                    deleteDialogState.show()
+                  }
                 }
               })
           }
         }
 
+        }
         if (showLoading) {
           LinearProgressIndicator(
             modifier = Modifier
@@ -235,9 +281,50 @@ fun SmbDetailScreen(smb: Smb) {
           )
         }
       }
-      BottomBar()
+      if (pickMode) {
+        Box(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .height(44.dp)
+            .background(color = LocalTheme.current.primary, shape = RoundedCornerShape(22.dp))
+            .clickableWithoutRipple {
+              smbVM.updateRootDir(smb, smb.getRelativePath(currentUrl), currentUrl)
+              MessageNotifier.show(R.string.music_folder_set)
+              // 立即按新目录刷新远程曲库
+              libraryVM.fetchMedia()
+              nav.popBackStack()
+            },
+          contentAlignment = Alignment.Center
+        ) {
+          Text(
+            stringResource(R.string.use_this_folder),
+            color = Color.White
+          )
+        }
+      } else {
+        BottomBar()
+      }
     }
   }
+
+  NormalDialog(
+    dialogState = deleteDialogState,
+    title = stringResource(R.string.delete),
+    content = pendingDelete?.name ?: "",
+    onPositive = {
+      val target = pendingDelete ?: return@NormalDialog
+      pendingDelete = null
+      scope.runWithLoading {
+        if (smbVM.deleteRemoteFile(smb, target.path)) {
+          MessageNotifier.show(R.string.delete_success)
+          // 同步刷新曲库（会清理该文件的缓存）
+          libraryVM.fetchMedia()
+          refreshTrigger++
+        }
+      }
+    }
+  )
 
   LaunchedEffect(currentUrl, refreshTrigger) {
     smbVM.loadSmbRes(smb, currentUrl)

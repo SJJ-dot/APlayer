@@ -11,7 +11,9 @@ import remix.myplayer.data.db.room.dao.HistoryDao
 import remix.myplayer.data.db.room.dao.MetaDataCacheDao
 import remix.myplayer.data.db.room.dao.PlayListDao
 import remix.myplayer.data.db.room.dao.PlayQueueDao
+import remix.myplayer.data.db.room.dao.RemoteSongCacheDao
 import remix.myplayer.data.db.room.dao.WebDavDao
+import remix.myplayer.data.db.room.dao.SourceConfigDao
 import javax.inject.Singleton
 
 @InstallIn(SingletonComponent::class)
@@ -52,5 +54,15 @@ object DatabaseModule {
   @Provides
   fun provideSmbDao(database: AppDatabase): remix.myplayer.data.db.room.dao.SmbDao {
     return database.smbDao()
+  }
+
+  @Provides
+  fun provideSourceConfigDao(database: AppDatabase): SourceConfigDao {
+    return database.sourceConfigDao()
+  }
+
+  @Provides
+  fun provideRemoteSongCacheDao(database: AppDatabase): RemoteSongCacheDao {
+    return database.remoteSongCacheDao()
   }
 }

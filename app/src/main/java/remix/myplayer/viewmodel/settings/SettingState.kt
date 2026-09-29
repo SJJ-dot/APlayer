@@ -16,6 +16,10 @@ data class CommonSettings(
   val uiFontScale: Float,
   val shake: Boolean,
   val showDisplayName: Boolean,
+  /** 是否启用本地音乐 */
+  val localMusicEnabled: Boolean,
+  /** 是否自动扫描本地音乐 */
+  val autoScanLocal: Boolean,
 )
 
 @Stable

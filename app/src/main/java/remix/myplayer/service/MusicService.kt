@@ -132,6 +132,9 @@ class MusicService : BaseService(),
   @Inject
   lateinit var replayGainController: ReplayGainController
 
+  @Inject
+  lateinit var prefetchManager: remix.myplayer.service.playback.PrefetchManager
+
   private val stateSource = MusicStateSource
 
   /**
@@ -544,7 +547,7 @@ class MusicService : BaseService(),
    * 初始化Mediaplayer
    */
   private fun setUpPlayback() {
-    playback = ExoPlayback(this, settingPrefs.decoderMode, audioFocusManager, replayGainController)
+    playback = ExoPlayback(this, settingPrefs.decoderMode, audioFocusManager, replayGainController, prefetchManager)
     playback.attach(this)
 
     Timber.v("setUpPlayback, audioSessionId: ${playback.audioSessionId}")
@@ -661,7 +664,8 @@ class MusicService : BaseService(),
   ) {
     checkMainThread()
     Timber.v("updatePlayHistory, song: ${song?.title}")
-    val songId = song?.takeIf { it.isLocal() }?.id ?: return
+    // 本地与远程统一记录（远程使用稳定负 id）
+    val songId = song?.takeIf { it.valid() }?.id ?: return
     launch {
       historyRepository.update(songId, checkDuplicate)
     }

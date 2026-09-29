@@ -80,14 +80,16 @@ fun HomeScreen() {
 
   ModalNavigationDrawer(
     drawerState = drawerState,
+    // 保持抽屉默认手势：点遮罩、在面板上滑动都能收起抽屉。
+    // 侧滑打开不会发生——内容区的横向滑动由 HorizontalPager 优先消费，
+    // 所以这里不需要（也不能）用 gesturesEnabled = false，否则遮罩点击会一起失效。
     drawerContent = { Drawer(drawerState) }) {
 
     val libraries by settingViewModel.enabledLibraries.collectAsStateWithLifecycle()
     val pagerState = rememberPagerState { libraries.size }
-    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(
-      flingAnimationSpec = null,
-      snapAnimationSpec = null
-    )
+
+    // 顶部栏固定展开（不随列表滚动折叠/展开）
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
     val showMultiSelect by remember {
       derivedStateOf {
@@ -163,7 +165,7 @@ fun HomeScreen() {
           .fillMaxSize()
           .background(LocalTheme.current.libraryBackground)
       ) {
-        // TopAppBar 直接参与 Column 布局：收起时高度变化即时传播，
+        // TopAppBar 直接参与 Column 布局：高度变化即时传播，
         // 避免 Scaffold topBar slot（SubcomposeLayout）测量滞后在 bar 底部露出缝隙
         AnimatedContent(
           targetState = showMultiSelect,

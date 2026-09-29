@@ -42,6 +42,13 @@ interface HistoryDao {
 
   @Query(
     """
+    DELETE FROM History WHERE audio_id IN (:audioIds)
+  """
+  )
+  suspend fun deleteByAudioIds(audioIds: List<Long>): Int
+
+  @Query(
+    """
     DELETE FROM History
   """
   )

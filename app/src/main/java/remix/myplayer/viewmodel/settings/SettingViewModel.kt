@@ -82,7 +82,9 @@ class SettingViewModel @Inject constructor(
       language = settingPrefs.language,
       uiFontScale = SettingPrefs.normalizeUiFontScale(settingPrefs.uiFontScale),
       shake = settingPrefs.shake,
-      showDisplayName = settingPrefs.showDisplayName
+      showDisplayName = settingPrefs.showDisplayName,
+      localMusicEnabled = settingPrefs.localMusicEnabled,
+      autoScanLocal = settingPrefs.autoScanLocal
     ),
     play = PlaySettings(
       ignoreAudioFocus = settingPrefs.ignoreAudioFocus,
@@ -152,15 +154,28 @@ class SettingViewModel @Inject constructor(
 
   init {
     // load libraries
-    val libraries = try {
+    val decoded = try {
       Json.decodeFromString<List<Library>>(settingPrefs.libraryJson)
-        .ifEmpty { Library.default }
     } catch (_: Exception) {
-      Library.default
+      emptyList()
     }
 
-    updateAllLibraries(libraries)
-    changeLibrary(enabledLibraries.value[0])
+    // 迁移：用「本地 / WebDAV / SMB」来源标签替换老的「文件夹 / 远程」标签；
+    // 并补齐所有默认标签，避免旧配置里只有来源标签时其它标签（歌曲/专辑/歌手/流派/播放列表）丢失。
+    val defaultTags = Library.default.map { it.tag }
+    val migrated = decoded
+      .filter { it.tag != Library.TAG_FOLDER && it.tag != Library.TAG_REMOTE }
+      .filter { it.tag in defaultTags }
+      .toMutableList()
+    // 用户已有的标签保留其顺序与启用状态；缺失的按默认补齐（默认启用）
+    defaultTags.forEach { tag ->
+      if (migrated.none { it.tag == tag }) {
+        migrated.add(Library(tag))
+      }
+    }
+
+    updateAllLibraries(if (migrated.isEmpty()) Library.default else migrated)
+    changeLibrary(enabledLibraries.value.firstOrNull() ?: Library(TAG_SONG))
   }
 
   fun updateAllLibraries(libraries: List<Library>) {
@@ -213,6 +228,18 @@ class SettingViewModel @Inject constructor(
   fun setShowDisplayName(enabled: Boolean) {
     settingPrefs.showDisplayName = enabled
     _settingsState.update { it.copy(common = it.common.copy(showDisplayName = enabled)) }
+  }
+
+  /** 启用/禁用本地音乐 */
+  fun setLocalMusicEnabled(enabled: Boolean) {
+    settingPrefs.localMusicEnabled = enabled
+    _settingsState.update { it.copy(common = it.common.copy(localMusicEnabled = enabled)) }
+  }
+
+  /** 是否自动扫描本地音乐 */
+  fun setAutoScanLocal(enabled: Boolean) {
+    settingPrefs.autoScanLocal = enabled
+    _settingsState.update { it.copy(common = it.common.copy(autoScanLocal = enabled)) }
   }
 
   fun setUiFontScale(scale: Float) {

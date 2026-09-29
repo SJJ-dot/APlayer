@@ -9,6 +9,12 @@ interface SmbClientDelegate {
 
   suspend fun listFiles(smb: Smb, url: String): List<SmbFile>
   suspend fun checkConnection(smb: Smb)
+
+  /**
+   * 删除共享内的文件，[relativePath] 为共享内相对路径（如 `Music/a.mp3`，不带 share 前缀）。
+   * 供「删除源文件」统一删除流程使用。
+   */
+  suspend fun delete(smb: Smb, relativePath: String)
 }
 
 @Singleton

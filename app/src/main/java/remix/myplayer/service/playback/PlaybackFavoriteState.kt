@@ -17,7 +17,8 @@ class PlaybackFavoriteState @Inject constructor(
 
   fun refresh(scope: CoroutineScope, song: Song, stateSource: StateSource) {
     cancelLookup()
-    if (!song.isLocal() || !song.valid()) {
+    // 本地与远程歌曲统一走收藏（不再限制 isLocal）
+    if (!song.valid()) {
       return
     }
 
@@ -34,7 +35,7 @@ class PlaybackFavoriteState @Inject constructor(
 
   suspend fun toggle(song: Song, stateSource: StateSource): Boolean {
     cancelLookup()
-    if (!song.isLocal() || !song.valid()) {
+    if (!song.valid()) {
       return false
     }
 

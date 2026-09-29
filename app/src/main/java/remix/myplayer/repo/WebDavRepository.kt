@@ -10,6 +10,8 @@ import javax.inject.Inject
 interface WebDavRepository {
   fun allWebDav(): Flow<List<WebDav>>
 
+  suspend fun byId(id: Int): WebDav?
+
   suspend fun insertOrReplace(webDav: WebDav): Long
 
   suspend fun delete(webDav: WebDav): Int
@@ -22,6 +24,8 @@ class WebDavRepoImpl @Inject constructor(
 ) : WebDavRepository {
 
   override fun allWebDav(): Flow<List<WebDav>> = webDavDao.selectAll()
+
+  override suspend fun byId(id: Int): WebDav? = webDavDao.byId(id)
 
   override suspend fun insertOrReplace(webDav: WebDav) = webDavDao.insertOrReplace(webDav)
 

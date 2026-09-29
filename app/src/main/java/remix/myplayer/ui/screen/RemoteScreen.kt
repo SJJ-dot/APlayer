@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -26,6 +27,7 @@ import remix.myplayer.data.db.room.entity.Smb
 import remix.myplayer.data.db.room.entity.WebDav
 import remix.myplayer.ui.dialog.AddSmbDialog
 import remix.myplayer.ui.dialog.AddWebDavDialog
+import remix.myplayer.ui.dialog.runWithLoading
 import remix.myplayer.ui.nav.LocalNavController
 import remix.myplayer.ui.nav.MessageNotifier
 import remix.myplayer.ui.theme.LocalTheme
@@ -111,20 +113,24 @@ private fun ListHeader(p: Int) {
 @Composable
 private fun Dialogs(webDavVM: WebDavViewModel, smbVM: SmbViewModel) {
   val context = LocalContext.current
+  val scope = rememberCoroutineScope()
 
-  AddWebDavDialog { alias, account, pwd, server, editWebDav ->
+  AddWebDavDialog { alias, account, pwd, server, editWebDav, onResult ->
     if (alias.isEmpty()) {
       MessageNotifier.show(R.string.can_t_be_empty, context.getString(R.string.alias))
+      onResult(false)
       return@AddWebDavDialog
     }
 
     if (account.isEmpty()) {
       MessageNotifier.show(R.string.can_t_be_empty, context.getString(R.string.account))
+      onResult(false)
       return@AddWebDavDialog
     }
 
     if (pwd.isEmpty()) {
       MessageNotifier.show(R.string.can_t_be_empty, context.getString(R.string.pwd))
+      onResult(false)
       return@AddWebDavDialog
     }
 
@@ -133,6 +139,7 @@ private fun Dialogs(webDavVM: WebDavViewModel, smbVM: SmbViewModel) {
         R.string.can_t_be_empty,
         context.getString(R.string.webdav_hint_server)
       )
+      onResult(false)
       return@AddWebDavDialog
     }
 
@@ -144,25 +151,33 @@ private fun Dialogs(webDavVM: WebDavViewModel, smbVM: SmbViewModel) {
         server = server,
         lastUrl = server,
       ).also { it.id = editWebDav.id }
-      webDavVM.insertOrReplaceWebDav(updated)
+      scope.runWithLoading {
+        onResult(webDavVM.saveWebDav(updated))
+      }
     } else {
-      webDavVM.insertOrReplaceWebDav(WebDav(alias, account, pwd, server.removeSuffix("/"), server))
+      val newWebDav = WebDav(alias, account, pwd, server.removeSuffix("/"), server)
+      scope.runWithLoading {
+        onResult(webDavVM.saveWebDav(newWebDav))
+      }
     }
   }
 
-  AddSmbDialog(smbVM) { alias, domain, account, pwd, server, share, editSmb ->
+  AddSmbDialog(smbVM) { alias, domain, account, pwd, server, share, editSmb, onResult ->
     if (alias.isEmpty()) {
       MessageNotifier.show(R.string.can_t_be_empty, context.getString(R.string.alias))
+      onResult(false)
       return@AddSmbDialog
     }
 
     if (account.isEmpty()) {
       MessageNotifier.show(R.string.can_t_be_empty, context.getString(R.string.account))
+      onResult(false)
       return@AddSmbDialog
     }
 
     if (pwd.isEmpty()) {
       MessageNotifier.show(R.string.can_t_be_empty, context.getString(R.string.pwd))
+      onResult(false)
       return@AddSmbDialog
     }
 
@@ -171,6 +186,7 @@ private fun Dialogs(webDavVM: WebDavViewModel, smbVM: SmbViewModel) {
         R.string.can_t_be_empty,
         context.getString(R.string.webdav_hint_server)
       )
+      onResult(false)
       return@AddSmbDialog
     }
 
@@ -179,6 +195,7 @@ private fun Dialogs(webDavVM: WebDavViewModel, smbVM: SmbViewModel) {
         R.string.can_t_be_empty,
         context.getString(R.string.share)
       )
+      onResult(false)
       return@AddSmbDialog
     }
 
@@ -193,19 +210,22 @@ private fun Dialogs(webDavVM: WebDavViewModel, smbVM: SmbViewModel) {
         share = share,
         lastUrl = lastUrl,
       ).also { it.id = editSmb.id }
-      smbVM.insertOrReplaceSmb(updated)
+      scope.runWithLoading {
+        onResult(smbVM.saveSmb(updated))
+      }
     } else {
-      smbVM.insertOrReplaceSmb(
-        Smb(
-          alias,
-          domain.ifEmpty { null },
-          account,
-          pwd,
-          server,
-          share,
-          lastUrl
-        )
+      val newSmb = Smb(
+        alias,
+        domain.ifEmpty { null },
+        account,
+        pwd,
+        server,
+        share,
+        lastUrl
       )
+      scope.runWithLoading {
+        onResult(smbVM.saveSmb(newSmb))
+      }
     }
   }
 }

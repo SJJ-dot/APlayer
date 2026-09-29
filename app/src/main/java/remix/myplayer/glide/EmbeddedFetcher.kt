@@ -1,6 +1,5 @@
 package remix.myplayer.glide
 
-import android.media.MediaMetadataRetriever
 import android.net.Uri
 import com.bumptech.glide.Priority
 import com.bumptech.glide.load.DataSource
@@ -17,22 +16,25 @@ class EmbeddedFetcher(private val fileUri: Uri) : DataFetcher<InputStream> {
   private var stream: InputStream? = null
 
   override fun loadData(priority: Priority, callback: DataFetcher.DataCallback<in InputStream>) {
-    val mediaDataRetriever = MediaMetadataRetriever()
+    // 远程（WebDAV）封面：url 被编码进 path（embedded:///<encoded url>），这里还原
+    val rawPath = fileUri.path ?: ""
+    val path = if (rawPath.startsWith("/http", ignoreCase = true)) {
+      Uri.decode(rawPath.drop(1))
+    } else {
+      rawPath
+    }
     try {
-      mediaDataRetriever.setDataSource(fileUri.path)
-      val bytes = mediaDataRetriever.embeddedPicture
+      // 与 UriFetcher 的存在性判断共用同一份解析结果，避免重复解析文件
+      val bytes = EmbeddedCoverCache.cachedArtOf(path)
       stream = if (bytes != null) {
         ByteArrayInputStream(bytes)
-      } else{
-        AudioFileCoverUtils.fallback(fileUri.path)
+      } else {
+        AudioFileCoverUtils.fallback(path)
       }
       callback.onDataReady(stream)
     } catch (e: Exception) {
       callback.onLoadFailed(GlideException(e.message, e))
-    } finally {
-      mediaDataRetriever.release()
     }
-
   }
 
   override fun cleanup() {

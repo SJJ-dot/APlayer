@@ -18,6 +18,7 @@ import remix.myplayer.helper.EQHelper
 import remix.myplayer.ui.nav.LocalNavController
 import remix.myplayer.ui.nav.RouteAbout
 import remix.myplayer.ui.nav.RouteEq
+import remix.myplayer.ui.nav.RouteSourceManage
 import remix.myplayer.ui.nav.RouteSettingDetail
 import remix.myplayer.ui.screen.setting.logic.color.BlackThemeLogic
 import remix.myplayer.ui.screen.setting.logic.color.ColoredNaviBarLogic
@@ -30,9 +31,7 @@ import remix.myplayer.ui.screen.setting.logic.common.ExportPlayListLogic
 import remix.myplayer.ui.screen.setting.logic.common.ImportPlayListLogic
 import remix.myplayer.ui.screen.setting.logic.common.LanguageLogic
 import remix.myplayer.ui.screen.setting.logic.common.LockScreenLogic
-import remix.myplayer.ui.screen.setting.logic.common.ManualScanLogic
 import remix.myplayer.ui.screen.setting.logic.common.RestoreDeleteLogic
-import remix.myplayer.ui.screen.setting.logic.common.ScanSizeLogic
 import remix.myplayer.ui.screen.setting.logic.common.ShakeLogic
 import remix.myplayer.ui.screen.setting.logic.common.ShowDisplayNameLogic
 import remix.myplayer.ui.screen.setting.logic.common.UiFontScaleLogic
@@ -80,6 +79,17 @@ fun SettingScreen() {
             descriptionRes = category.descriptionRes,
           ) {
             nav.navigate(settingDetailRoute(category.route))
+          }
+
+          // 音源管理：独立入口，紧随曲库
+          if (category == SettingCategory.Library) {
+            SettingCategoryPreference(
+              iconRes = R.drawable.ic_dns_24dp,
+              titleRes = R.string.source_manage,
+              descriptionRes = R.string.setting_source_desc,
+            ) {
+              nav.navigate(RouteSourceManage)
+            }
           }
         }
       }
@@ -184,13 +194,11 @@ private enum class SettingCategory(
 
 @Composable
 private fun CommonPreferenceItems() {
-  ScanSizeLogic()
+  // 本地扫描相关的「过滤大小 / 手动扫描」已统一移入音源管理页
 
   BlackListLogic()
 
   LockScreenLogic()
-
-  ManualScanLogic()
 
   ImportPlayListLogic()
 

@@ -9,6 +9,9 @@
     <string name="tab_folder">フォルダ</string>
     <string name="tab_genre">流派</string>
     <string name="tab_remote">リモート</string>
+    <string name="tab_local">ローカル</string>
+    <string name="tab_webdav">WebDAV</string>
+    <string name="tab_smb">SMB</string>
 
     <string name="drawer_song">ライブラリ</string>
     <string name="drawer_recently_add">最近の追加</string>

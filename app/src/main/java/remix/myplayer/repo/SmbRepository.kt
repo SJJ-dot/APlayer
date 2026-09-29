@@ -10,6 +10,8 @@ import javax.inject.Inject
 interface SmbRepository {
   fun allSmb(): Flow<List<Smb>>
 
+  suspend fun byId(id: Int): Smb?
+
   suspend fun insertOrReplace(smb: Smb): Long
 
   suspend fun delete(smb: Smb): Int
@@ -22,6 +24,8 @@ class SmbRepoImpl @Inject constructor(
 ) : SmbRepository {
 
   override fun allSmb(): Flow<List<Smb>> = smbDao.selectAll()
+
+  override suspend fun byId(id: Int): Smb? = smbDao.byId(id)
 
   override suspend fun insertOrReplace(smb: Smb) = smbDao.insertOrReplace(smb)
 

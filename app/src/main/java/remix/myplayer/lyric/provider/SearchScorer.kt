@@ -16,6 +16,9 @@ object SearchScorer {
   private const val MIN_SCORE_THRESHOLD = 55f
   private const val DURATION_TOLERANCE_MS = 4000L
 
+  /** 远程歌曲的时长可能来自文件标签解析/估算，容差放宽；时长为 0 时不参与校验 */
+  private const val REMOTE_DURATION_TOLERANCE_MS = 8000L
+
   /**
    * 评分结果
    */
@@ -44,11 +47,11 @@ object SearchScorer {
     candidateAlbum: String? = null,
     candidateDuration: Long? = null
   ): ScoreResult {
-    // 时长匹配检查
-    if (targetSong is Song.Local) {
-      if (!checkDurationMatch(targetSong.duration, candidateDuration)) {
-        return ScoreResult(score = 0f, durationMatch = false)
-      }
+    // 时长匹配检查（本地/远程统一；远程容差放宽，时长为 0 时不拦截）
+    val tolerance =
+      if (targetSong is Song.Local) DURATION_TOLERANCE_MS else REMOTE_DURATION_TOLERANCE_MS
+    if (!checkDurationMatch(targetSong.duration, candidateDuration, tolerance)) {
+      return ScoreResult(score = 0f, durationMatch = false)
     }
 
     // 计算各项得分
@@ -88,10 +91,10 @@ object SearchScorer {
     keyword: String,
     keyKind: SearchKeyUtil.KeyKind
   ): ScoreResult {
-    if (targetSong is Song.Local) {
-      if (!checkDurationMatch(targetSong.duration, candidateDuration)) {
-        return ScoreResult(score = 0f, durationMatch = false)
-      }
+    val tolerance =
+      if (targetSong is Song.Local) DURATION_TOLERANCE_MS else REMOTE_DURATION_TOLERANCE_MS
+    if (!checkDurationMatch(targetSong.duration, candidateDuration, tolerance)) {
+      return ScoreResult(score = 0f, durationMatch = false)
     }
     return if (keyKind == SearchKeyUtil.KeyKind.FILE_NAME) {
       val s1 = textDifference(keyword, candidateTitle ?: "")
@@ -150,11 +153,15 @@ object SearchScorer {
   /**
    * 检查时长匹配
    */
-  private fun checkDurationMatch(localDuration: Long?, remoteDuration: Long?): Boolean {
+  private fun checkDurationMatch(
+    localDuration: Long?,
+    remoteDuration: Long?,
+    tolerance: Long = DURATION_TOLERANCE_MS
+  ): Boolean {
     if (localDuration == null || remoteDuration == null) return true
     if (localDuration <= 0 || remoteDuration <= 0) return true
 
-    return abs(localDuration - remoteDuration) <= DURATION_TOLERANCE_MS
+    return abs(localDuration - remoteDuration) <= tolerance
   }
 
   /**

@@ -59,6 +59,40 @@ class SmbClientDelegateImpl : SmbClientDelegate {
       }
     }
 
+  override suspend fun delete(smb: Smb, relativePath: String) {
+    withContext(Dispatchers.IO) {
+      try {
+        SMBClient().use { client ->
+          val (host, port) = Smb.parseServerAddress(smb.server)
+          val connection = if (port != null) client.connect(host, port) else client.connect(host)
+          connection.use {
+            val authContext = AuthenticationContext(smb.account, smb.pwd.toCharArray(), smb.domain)
+            val session = connection.authenticate(authContext)
+            session.use {
+              val diskShare = session.connectShare(smb.share) as DiskShare
+              diskShare.use { share ->
+                val path = relativePath.replace('/', '\\').trimStart('\\')
+                try {
+                  share.rm(path)
+                } catch (e: Exception) {
+                  // 目录不能用 rm 删除，回退为递归删除
+                  share.rmdir(path, true)
+                }
+              }
+            }
+          }
+        }
+      } catch (e: SMBApiException) {
+        throw SmbException(
+          e.message, e, e.status == NtStatus.STATUS_OBJECT_NAME_NOT_FOUND ||
+              e.status == NtStatus.STATUS_OBJECT_PATH_NOT_FOUND
+        )
+      } catch (e: Exception) {
+        throw SmbException(e.message, e)
+      }
+    }
+  }
+
   override suspend fun checkConnection(smb: Smb) {
     withContext(Dispatchers.IO) {
       SMBClient().use { client ->

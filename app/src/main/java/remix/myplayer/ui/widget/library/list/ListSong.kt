@@ -19,9 +19,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
+import remix.myplayer.R
 import remix.myplayer.data.model.audio.APlayerModel
 import remix.myplayer.data.model.audio.Song
 import remix.myplayer.ui.theme.LocalTheme
@@ -103,7 +105,14 @@ fun ListSong(
       ) {
         TextPrimary(song.showName)
         Spacer(modifier = Modifier.height(4.dp))
-        TextSecondary(String.format("%s-%s", song.artist, song.album))
+        // 本地与远程统一：专辑/歌手缺失时展示「未知专辑 / 未知艺术家」
+        TextSecondary(
+          String.format(
+            "%s-%s",
+            song.artist.ifBlank { stringResource(R.string.unknown_artist) },
+            song.album.ifBlank { stringResource(R.string.unknown_album) }
+          )
+        )
       }
 
       SongPopupButton(

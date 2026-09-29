@@ -9,6 +9,8 @@
   <string name="tab_folder">Folders</string>
   <string name="tab_genre">Genres</string>
   <string name="tab_remote">Remote</string>
+  <string name="tab_local">Local</string>
+  <string name="tab_webdav">WebDAV</string>
   <string name="tab_smb">SMB</string>
 
   <string name="drawer_song">Song Library</string>
@@ -99,6 +101,16 @@
 
   <string name="new_folder">New folder</string>
   <string name="choose_folder">Choose</string>
+  <string name="set_as_music_folder">Set as music folder</string>
+  <string name="music_folder_set">Music folder updated</string>
+  <string name="use_this_folder">Use this folder</string>
+  <string name="setting_source_desc">Add and manage remote sources</string>
+  <string name="local_music">Local music</string>
+  <string name="enable_local_music">Enable local music</string>
+  <string name="enable_local_music_tip">When off, local songs are removed from the library</string>
+  <string name="auto_scan">Auto scan</string>
+  <string name="auto_scan_tip">Refresh the library automatically when local music changes</string>
+  <string name="load_failed_retry">Load failed, pull down to retry</string>
   <string name="setting_success">Set successfully</string>
   <string name="setting_error">Set failed</string>
   <string name="search_error">Search failed</string>
@@ -525,6 +537,11 @@
   <string name="webdav">WebDav</string>
   <string name="smb">SMB</string>
   <string name="dlna">DLNA</string>
+
+  <string name="source_manage">Music Sources</string>
+  <string name="enabled">Enabled</string>
+  <string name="add_webdav">Add WebDav</string>
+  <string name="add_smb">Add SMB</string>
 
   <string name="alias">Alias</string>
   <string name="account">Account</string>

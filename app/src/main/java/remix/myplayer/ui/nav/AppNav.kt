@@ -14,7 +14,11 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -28,11 +32,13 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import androidx.navigation.toRoute
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.savedstate.SavedState
 import kotlinx.serialization.InternalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.serializer
+import remix.myplayer.R
 import remix.myplayer.data.db.room.entity.PlayList
 import remix.myplayer.data.db.room.entity.Smb
 import remix.myplayer.data.db.room.entity.WebDav
@@ -59,10 +65,13 @@ import remix.myplayer.ui.screen.home.HomeScreen
 import remix.myplayer.ui.screen.setting.SettingDetailScreen
 import remix.myplayer.ui.screen.setting.SettingScreen
 import remix.myplayer.ui.screen.setting.ReplayGainSettingScreen
+import remix.myplayer.ui.screen.source.SourceManageScreen
 import remix.myplayer.ui.screen.smb.SmbDetailScreen
 import remix.myplayer.ui.screen.webdav.WebDavDetailScreen
 import remix.myplayer.util.Constants
 import remix.myplayer.viewmodel.libraryViewModel
+import remix.myplayer.viewmodel.smbViewModel
+import remix.myplayer.viewmodel.webDavViewModel
 import java.io.File
 import kotlin.reflect.KClass
 import kotlin.reflect.typeOf
@@ -79,9 +88,17 @@ const val RouteHistory = "history"
 const val RouteSearch = "search"
 const val RouteTagEdit = "tag_edit"
 const val RouteCustomCoverCrop = "custom_cover_crop"
+const val RouteSourceManage = "source_manage"
 const val RouteTagEditCrop = "tag_edit_crop"
 const val RouteEq = "eq"
 const val RouteSupport = "support"
+
+/** 远程音源选目录模式：无播放 UI，底部“使用此目录”确认。仅传 id，实体从 ViewModel 列表解析 */
+@Serializable
+data class WebDavPickRoute(val id: Int)
+
+@Serializable
+data class SmbPickRoute(val id: Int)
 
 // 存在目标页 NavBackStackEntry.savedStateHandle 里的标志，
 // 标记该页是从播放页浮窗跳转过来的，退出时需要恢复浮窗
@@ -107,6 +124,10 @@ fun AppNav() {
 
             normalAnimatedScreen(RouteSetting) {
               SettingScreen()
+            }
+
+            normalAnimatedScreen(RouteSourceManage) {
+              SourceManageScreen()
             }
 
             normalAnimatedScreen(
@@ -194,6 +215,63 @@ fun AppNav() {
             ) {
               val smb = it.toRoute<Smb>()
               SmbDetailScreen(smb)
+            }
+
+            composable<WebDavPickRoute>(
+              enterTransition = enterTransition(),
+              exitTransition = exitTransition(),
+              popEnterTransition = popEnterTransition(),
+              popExitTransition = popExitTransition(),
+            ) {
+              val route = it.toRoute<WebDavPickRoute>()
+              val navController = LocalNavController.current
+              val webDavVM = webDavViewModel
+              val webDavList by webDavVM.webDavList.collectAsStateWithLifecycle()
+              // 兜底：列表 Flow 可能尚未发出刚插入的行，先做一次性查询
+              var fetchedDone by remember { mutableStateOf(false) }
+              val fetched by produceState<WebDav?>(null, route.id) {
+                value = webDavVM.getWebDavById(route.id)
+                fetchedDone = true
+              }
+              val webDav = webDavList.firstOrNull { item -> item.id == route.id } ?: fetched
+              // 查询完成仍找不到（如配置已被删除）：提示并返回，避免停在空白页
+              LaunchedEffect(webDav, fetchedDone) {
+                if (webDav == null && fetchedDone) {
+                  MessageNotifier.show(R.string.load_failed)
+                  navController.popBackStack()
+                }
+              }
+              if (webDav != null) {
+                WebDavDetailScreen(webDav, pickMode = true)
+              }
+            }
+
+            composable<SmbPickRoute>(
+              enterTransition = enterTransition(),
+              exitTransition = exitTransition(),
+              popEnterTransition = popEnterTransition(),
+              popExitTransition = popExitTransition(),
+            ) {
+              val route = it.toRoute<SmbPickRoute>()
+              val navController = LocalNavController.current
+              val smbVM = smbViewModel
+              val smbList by smbVM.smbList.collectAsStateWithLifecycle()
+              var fetchedDone by remember { mutableStateOf(false) }
+              val fetched by produceState<Smb?>(null, route.id) {
+                value = smbVM.getSmbById(route.id)
+                fetchedDone = true
+              }
+              val smb = smbList.firstOrNull { item -> item.id == route.id } ?: fetched
+              // 查询完成仍找不到（如配置已被删除）：提示并返回，避免停在空白页
+              LaunchedEffect(smb, fetchedDone) {
+                if (smb == null && fetchedDone) {
+                  MessageNotifier.show(R.string.load_failed)
+                  navController.popBackStack()
+                }
+              }
+              if (smb != null) {
+                SmbDetailScreen(smb, pickMode = true)
+              }
             }
 
             normalAnimatedScreen(

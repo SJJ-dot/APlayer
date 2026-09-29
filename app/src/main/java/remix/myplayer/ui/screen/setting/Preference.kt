@@ -16,6 +16,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
@@ -42,8 +43,13 @@ fun ArrowPreference(res: Int, onClick: () -> Unit) {
 }
 
 @Composable
-fun NormalPreference(title: String, content: String = "", onClick: () -> Unit) {
-  Preference(onClick = onClick, title, content)
+fun NormalPreference(
+  title: String,
+  content: String = "",
+  enabled: Boolean = true,
+  onClick: () -> Unit
+) {
+  Preference(onClick = onClick, title = title, content = content, enabled = enabled)
 }
 
 @Composable
@@ -61,14 +67,16 @@ fun SwitchPreference(
   title: String,
   content: String? = null,
   checked: Boolean,
+  enabled: Boolean = true,
   onCheckedChange: (Boolean) -> Unit
 ) {
   Preference(onClick = {
     onCheckedChange(!checked)
-  }, title, content) {
+  }, title = title, content = content, enabled = enabled) {
     Switch(
       modifier = Modifier.scale(0.9f),
       checked = checked,
+      enabled = enabled,
       colors = SwitchDefaults.colors().copy(
         checkedTrackColor = LocalTheme.current.secondary,
         uncheckedTrackColor = Color.Transparent
@@ -84,6 +92,7 @@ fun Preference(
   onClick: () -> Unit,
   title: String,
   content: String? = null,
+  enabled: Boolean = true,
   leading: (@Composable (() -> Unit))? = null,
   trailing: (@Composable (() -> Unit))? = null
 ) {
@@ -91,11 +100,10 @@ fun Preference(
     modifier = Modifier
       .fillMaxWidth()
       .wrapContentHeight()
-      .clickWithRipple(false) {
-        onClick()
-      }
+      .then(if (enabled) Modifier.clickWithRipple(false) { onClick() } else Modifier)
       .background(color = LocalTheme.current.mainBackground, shape = RectangleShape)
-      .padding(horizontal = 16.dp, vertical = 10.dp),
+      .padding(horizontal = 16.dp, vertical = 10.dp)
+      .alpha(if (enabled) 1f else 0.4f),
     verticalAlignment = Alignment.CenterVertically) {
     leading?.invoke()
 

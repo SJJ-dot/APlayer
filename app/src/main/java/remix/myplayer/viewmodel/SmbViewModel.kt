@@ -16,7 +16,9 @@ import remix.myplayer.data.model.smb.SmbFile
 import remix.myplayer.misc.manager.DynamicModuleManager
 import remix.myplayer.misc.manager.DynamicModuleStatus
 import remix.myplayer.repo.SmbRepository
+import remix.myplayer.repo.source.RemoteSongLookup
 import remix.myplayer.repo.usecase.FetchMetaDataUseCase
+import remix.myplayer.service.MusicServiceRemote
 import remix.myplayer.ui.dialog.DialogState
 import remix.myplayer.ui.dialog.runWithLoading
 import remix.myplayer.ui.nav.MessageNotifier
@@ -27,6 +29,7 @@ import javax.inject.Inject
 @HiltViewModel
 class SmbViewModel @Inject constructor(
   private val smbRepository: SmbRepository,
+  private val remoteSongLookup: RemoteSongLookup,
   private val fetchMetaDataUseCase: FetchMetaDataUseCase,
   private val delegateProvider: SmbClientDelegateProvider,
   private val dynamicModuleManager: DynamicModuleManager
@@ -89,9 +92,51 @@ class SmbViewModel @Inject constructor(
     }
   }
 
+  /** 删除远端文件，[relativePath] 为共享内相对路径 */
+  suspend fun deleteRemoteFile(smb: Smb, relativePath: String): Boolean {
+    val d = delegateProvider.getDelegate() ?: return false
+    return try {
+      d.delete(smb, relativePath)
+      true
+    } catch (e: Exception) {
+      Timber.e(e, "delete smb file failed: $relativePath")
+      MessageNotifier.show(e.localizedMessage ?: "Delete failed")
+      false
+    }
+  }
+
+  /** 离开页面时重置加载状态，避免下次进入读到残留 Error 而立即退出 */
+  fun clearResState() {
+    _smbResState.value = DataUiState.Loading()
+  }
+
   fun deleteSmb(smb: Smb) = viewModelScope.launch {
     smbRepository.delete(smb)
+    // 同步清理该源的缓存歌曲与内存解析表，并从播放队列移除
+    val removedIds = remoteSongLookup.clearSource("smb:${smb.server}:${smb.share}")
+    if (removedIds.isNotEmpty()) {
+      MusicServiceRemote.removeFromQueue(removedIds)
+    }
   }
+
+  /**
+   * 启用/禁用音源。禁用时清掉该源的缓存歌曲、内存解析表与播放队列。
+   *
+   * 为 suspend 方法：调用方需在本方法**返回后**再刷新曲库，避免清理与刷新并发导致的旧数据残留。
+   */
+  suspend fun setEnabled(smb: Smb, enabled: Boolean) {
+    // 不要就地修改传入实例（会导致列表不重组、开关状态不刷新），写库用 copy 生成新实例
+    smbRepository.insertOrReplace(smb.copy(enabled = enabled).also { it.id = smb.id })
+    if (!enabled) {
+      val removedIds = remoteSongLookup.clearSource("smb:${smb.server}:${smb.share}")
+      if (removedIds.isNotEmpty()) {
+        MusicServiceRemote.removeFromQueue(removedIds)
+      }
+    }
+  }
+
+  /** 一次性查询（不依赖列表 Flow 的刷新时机），供导航后立即按 id 恢复实体 */
+  suspend fun getSmbById(id: Int): Smb? = smbRepository.byId(id)
 
   fun updateLastUrl(smb: Smb, newUrl: String) = viewModelScope.launch {
     if (smb.lastUrl == newUrl) {
@@ -101,19 +146,47 @@ class SmbViewModel @Inject constructor(
     smbRepository.insertOrReplace(smb)
   }
 
-  fun insertOrReplaceSmb(smb: Smb) = viewModelScope.runWithLoading {
+  /**
+   * 保存导入根目录，并把浏览位置重置到该目录。
+   * [relativePath] 为共享内相对路径，根级（空串）时清除 [Smb.rootDir] 即导入整个共享。
+   */
+  fun updateRootDir(smb: Smb, relativePath: String, currentUrl: String) = viewModelScope.launch {
+    val updated = smb.copy(
+      rootDir = relativePath.trim { it == '/' || it == '\\' }.takeIf { it.isNotEmpty() },
+      lastUrl = if (currentUrl.isNotBlank()) currentUrl else smb.lastUrl
+    ).also { it.id = smb.id }
+    smbRepository.insertOrReplace(updated)
+  }
+
+  suspend fun saveSmb(smb: Smb): Boolean {
+    // 兜底清理，防止输入框带入不可见的换行/空格
+    smb.account = smb.account.trim()
+    smb.pwd = smb.pwd.trim()
+    smb.server = smb.server.trim()
+    smb.share = smb.share.trim { it == '/' || it == '\\' || it == ' ' }
+    smb.domain = smb.domain?.trim()?.ifEmpty { null }
     val d = delegateProvider.getDelegate()
     if (d == null) {
       MessageNotifier.show("SMB module not installed")
-      return@runWithLoading
+      return false
     }
-    try {
+    return try {
       d.checkConnection(smb)
-      smbRepository.insertOrReplace(smb)
+      // Room 不会把自增主键写回实体，需手动回填，否则后续按 id 导航/查询会拿到 0
+      val rowId = smbRepository.insertOrReplace(smb)
+      if (smb.id == 0 && rowId > 0) {
+        smb.id = rowId.toInt()
+      }
+      true
     } catch (e: Exception) {
       Timber.e(e)
       MessageNotifier.show(e.localizedMessage ?: "Save failed")
+      false
     }
+  }
+
+  fun insertOrReplaceSmb(smb: Smb) = viewModelScope.launch {
+    saveSmb(smb)
   }
 
   private val _addSmbState = MutableStateFlow(AddSmbState(DialogState()))

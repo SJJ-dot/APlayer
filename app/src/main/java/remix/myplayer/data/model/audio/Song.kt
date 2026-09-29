@@ -263,7 +263,7 @@ sealed class Song(
     val account: String,
     val pwd: String
   ) : Song(
-    -abs(data.hashCode().toLong()), title, title, album, 0L, artist, 0L, duration, data, size, year, genre, track, dateModified
+    Song.stableRemoteId(data), title, title, album, 0L, artist, 0L, duration, data, size, year, genre, track, dateModified
   ) {
     val headers by lazy {
       mapOf(
@@ -323,6 +323,18 @@ sealed class Song(
   companion object {
     @Serial
     private const val serialVersionUID: Long = 6842734564265523984
+
+    /**
+     * 远程歌曲的稳定 id：基于完整 URL 生成 64 位哈希并取负，确保与本地正 id 不冲突，
+     * 且同一 URL 始终映射同一 id（解决收藏 / 历史对远程歌曲的标识一致性问题）。
+     */
+    fun stableRemoteId(data: String): Long {
+      var h = 1125899906842597L
+      for (c in data) {
+        h = 31 * h + c.code.toLong()
+      }
+      return -(h and Long.MAX_VALUE)
+    }
 
     @JvmStatic
     val EMPTY_SONG = Local(-1, "", "", "", -1, "", -1, -1, "", -1, "", "", "", -1)

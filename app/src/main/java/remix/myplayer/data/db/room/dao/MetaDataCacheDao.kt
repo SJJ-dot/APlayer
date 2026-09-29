@@ -17,4 +17,7 @@ interface MetaDataCacheDao {
 
   @Query("DELETE FROM MetaDataCache WHERE updateTime < :timestamp")
   suspend fun deleteOldCache(timestamp: Long)
+
+  @Query("DELETE FROM MetaDataCache WHERE url = :url")
+  suspend fun delete(url: String)
 }

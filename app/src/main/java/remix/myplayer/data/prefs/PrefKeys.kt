@@ -43,6 +43,12 @@ object PrefKeys {
     /** 过滤大小 */
     const val SCAN_SIZE = "scan_size"
 
+    /** 是否启用本地音乐（关闭后本地歌曲不进入曲库） */
+    const val LOCAL_MUSIC_ENABLED = "local_music_enabled"
+
+    /** 是否自动扫描本地音乐（MediaStore 变化时自动刷新曲库） */
+    const val AUTO_SCAN_LOCAL = "auto_scan_local"
+
     /** 强制按拼音排序 */
     const val FORCE_SORT = "force_sort"
 
@@ -85,6 +91,9 @@ object PrefKeys {
 
     /** 移除歌曲 */
     const val BLACKLIST_SONG = "black_list_song"
+
+    /** 移除的远程歌曲 url（远程无 MediaStore id，按 url 排除） */
+    const val BLACKLIST_REMOTE_URL = "black_list_remote_url"
 
     /** 黑名单 */
     const val BLACKLIST = "blacklist"

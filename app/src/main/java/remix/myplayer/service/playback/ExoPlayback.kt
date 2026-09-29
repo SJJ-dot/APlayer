@@ -52,6 +52,7 @@ class ExoPlayback(
   private val decoderMode: Int,
   private val audioFocusManager: AudioFocusManager,
   private val replayGainController: ReplayGainController,
+  private val prefetchManager: PrefetchManager,
 ) : Playback {
 
   override var speed: Float
@@ -111,7 +112,17 @@ class ExoPlayback(
       addListener(object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
           callback?.onIsPlayingChanged(isPlaying)
-          if (isPlaying) startProgressTicker() else stopProgressTicker()
+          if (isPlaying) {
+            startProgressTicker()
+            prefetchNext()
+          } else stopProgressTicker()
+        }
+
+        private fun prefetchNext() {
+          val next = nextSong ?: return
+          if (next is Song.Remote) {
+            scope.launch { prefetchManager.prefetch(context, next) }
+          }
         }
 
         override fun onAudioSessionIdChanged(audioSessionId: Int) {
@@ -509,7 +520,7 @@ private class ReplayGainRenderersFactory(
 }
 
 @OptIn(UnstableApi::class)
-private object MediaCache {
+object MediaCache {
 
   @Volatile
   private var cache: SimpleCache? = null

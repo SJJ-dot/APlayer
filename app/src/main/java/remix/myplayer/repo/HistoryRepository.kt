@@ -16,6 +16,9 @@ interface HistoryRepository {
 
   suspend fun update(audioId: Long, checkDuplicate: Boolean = true): Int
 
+  /** 删除歌曲后同步清理其播放历史（本地正 id / 远程负 id 通用） */
+  suspend fun deleteByAudioIds(audioIds: List<Long>): Int
+
   suspend fun clear()
 }
 
@@ -63,6 +66,9 @@ class HistoryRepoImpl @Inject constructor(
       historyDao.insertHistory(newHistory).toInt()
     }
   }
+
+  override suspend fun deleteByAudioIds(audioIds: List<Long>): Int =
+    if (audioIds.isEmpty()) 0 else historyDao.deleteByAudioIds(audioIds)
 
   override suspend fun clear() = historyDao.clear()
 }

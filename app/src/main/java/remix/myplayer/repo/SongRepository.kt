@@ -18,6 +18,7 @@ import remix.myplayer.data.model.audio.Song
 import remix.myplayer.data.prefs.SettingPrefs
 import remix.myplayer.helper.ItemsSorter
 import remix.myplayer.helper.SortOrder
+import remix.myplayer.repo.source.RemoteSongLookup
 import remix.myplayer.util.ext.checkWorkerThread
 import timber.log.Timber
 import java.util.Calendar
@@ -53,7 +54,8 @@ interface SongRepository {
 class SongRepoImpl @Inject constructor(
   @param:ApplicationContext private val context: Context,
   private val playListDao: PlayListDao,
-  private val settingPrefs: SettingPrefs
+  private val settingPrefs: SettingPrefs,
+  private val remoteSongLookup: RemoteSongLookup
 ) : SongRepository, AbstractRepository(settingPrefs) {
 
   override fun allSongs(): List<Song> {
@@ -125,8 +127,13 @@ class SongRepoImpl @Inject constructor(
     }
   }
 
-  override fun song(id: Long) =
-    getSongs(Audio.Media._ID + "=?", arrayOf(id.toString() + ""), null).firstOrNull()
+  override fun song(id: Long): Song? {
+    if (id < 0) {
+      // 远程歌曲：从内存解析表还原完整 Song.Remote（统一曲库加载后即填充）
+      return remoteSongLookup.getCached(id)
+    }
+    return getSongs(Audio.Media._ID + "=?", arrayOf(id.toString() + ""), null).firstOrNull()
+  }
 
   override suspend fun getSongsByModels(models: List<APlayerModel>): List<Song> {
     checkWorkerThread()
@@ -139,27 +146,72 @@ class SongRepoImpl @Inject constructor(
         }
 
         is Album -> {
-          result.addAll(
-            getSongs(
-              Audio.Media.ALBUM_ID + "=?",
-              arrayOf(it.albumID.toString()),
-              settingPrefs.albumDetailSortOrder
+          if (it.folderPath != null) {
+            // 无专辑标签的文件夹分组：按文件夹取本地 + 远程歌曲
+            val prefix = it.folderPath.trimEnd('/') + "/"
+            result.addAll(
+              getSongs(
+                Audio.Media.DATA + " LIKE ?",
+                arrayOf("$prefix%"),
+                settingPrefs.albumDetailSortOrder
+              )
             )
-          )
+            result.addAll(
+              ItemsSorter.sortedSongs(
+                remoteSongLookup.cachedByFolder(it.folderPath),
+                settingPrefs.albumDetailSortOrder
+              )
+            )
+          } else {
+            // 远程专辑（负 id）没有 MediaStore 记录，按专辑名匹配远程歌曲
+            if (it.albumID >= 0) {
+              result.addAll(
+                getSongs(
+                  Audio.Media.ALBUM_ID + "=?",
+                  arrayOf(it.albumID.toString()),
+                  settingPrefs.albumDetailSortOrder
+                )
+              )
+            }
+            result.addAll(
+              ItemsSorter.sortedSongs(
+                remoteSongLookup.cachedByAlbum(it.album),
+                settingPrefs.albumDetailSortOrder
+              )
+            )
+          }
         }
 
         is Artist -> {
+          if (it.artistID >= 0) {
+            result.addAll(
+              getSongs(
+                Audio.Media.ARTIST_ID + "=?",
+                arrayOf(it.artistID.toString()),
+                settingPrefs.artistDetailSortOrder
+              )
+            )
+          }
           result.addAll(
-            getSongs(
-              Audio.Media.ARTIST_ID + "=?",
-              arrayOf(it.artistID.toString()),
+            ItemsSorter.sortedSongs(
+              remoteSongLookup.cachedByArtist(it.artist),
               settingPrefs.artistDetailSortOrder
             )
           )
         }
 
         is Genre -> {
-          result.addAll(getSongsByGenreId(it.id, settingPrefs.genreDetailSortOrder))
+          if (it.id >= 0) {
+            result.addAll(getSongsByGenreId(it.id, settingPrefs.genreDetailSortOrder))
+          }
+          if (it.genre.isNotBlank()) {
+            result.addAll(
+              ItemsSorter.sortedSongs(
+                remoteSongLookup.cachedByGenre(it.genre),
+                settingPrefs.genreDetailSortOrder
+              )
+            )
+          }
         }
 
         is Folder -> {
@@ -172,24 +224,33 @@ class SongRepoImpl @Inject constructor(
           val playListSortOrder = settingPrefs.getPlayListDetailSortOrder(it.id)
           val customSort = playListSortOrder == SortOrder.PLAYLIST_SONG_CUSTOM
           val ids = it.audioIds.toList()
+          val localIds = ids.filter { id -> id >= 0 }
+          val remoteIds = ids.filter { id -> id < 0 }
 
-          val songs = getSongs(
-            makeInStrQuery(ids),
-            null,
-            if (customSort) null else playListSortOrder
-          )
-
-          val tempArray: Array<Song> = Array(ids.size) { Song.EMPTY_SONG }
-          songs.forEachIndexed { index, song ->
-            tempArray[if (customSort) ids.indexOf(song.id) else index] = song
+          val localSongs = if (localIds.isNotEmpty()) {
+            getSongs(
+              makeInStrQuery(localIds),
+              null,
+              if (customSort) null else playListSortOrder
+            )
+          } else {
+            emptyList()
           }
 
-          // remove no longer exist
-          if (songs.size < ids.size) {
-            val deleteIds = ArrayList<Long>()
-            val existIds = songs.map { it.id }
+          val tempArray: Array<Song> = Array(ids.size) { Song.EMPTY_SONG }
+          localSongs.forEachIndexed { index, song ->
+            tempArray[if (customSort) ids.indexOf(song.id) else index] = song
+          }
+          remoteIds.forEach { rid ->
+            remoteSongLookup.get(rid)?.let { song -> tempArray[ids.indexOf(rid)] = song }
+          }
 
-            for (audioId in ids) {
+          // remove no longer exist（仅本地）
+          if (localSongs.size < localIds.size) {
+            val deleteIds = ArrayList<Long>()
+            val existIds = localSongs.map { it.id }
+
+            for (audioId in localIds) {
               if (!existIds.contains(audioId)) {
                 deleteIds.add(audioId)
               }
@@ -208,7 +269,8 @@ class SongRepoImpl @Inject constructor(
       }
     }
 
-    return result
+    // 同一歌曲可能同时命中本地与远程来源，按 id 去重（本地正 id / 远程负 id 各自唯一）
+    return result.distinctBy { it.id }
   }
 
   override fun getSongsByGenreId(genreId: Long, sortOrder: String?): List<Song> {

@@ -64,12 +64,11 @@ fun ScreenPopupButton(library: Library?, vm: LibraryViewModel = libraryViewModel
     Library.TAG_PLAYLIST -> settingState.library.playlistSortOrder
     Library.TAG_GENRE -> settingState.library.genreSortOrder
     Library.TAG_FOLDER -> settingState.library.folderSortOrder
+    Library.TAG_LOCAL, Library.TAG_WEBDAV, Library.TAG_SMB -> settingState.library.songSortOrder
     else -> throw RuntimeException("unknown tag: ${library.tag}")
   }
-  val selectedIndex = sortOrders.indexOf(sortOrder)
-  if (selectedIndex < 0) {
-    throw IllegalArgumentException("sortOrder:$sortOrder sortOrders: $sortOrders")
-  }
+  // 找不到（例如已废弃的排序方式）时回退到第一项，避免崩溃
+  val selectedIndex = sortOrders.indexOf(sortOrder).let { if (it < 0) 0 else it }
 
   DropdownMenu(
     modifier = Modifier.wrapContentSize(),
@@ -105,9 +104,19 @@ fun ScreenPopupButton(library: Library?, vm: LibraryViewModel = libraryViewModel
         Library.TAG_FOLDER -> {
           settingVM.setSortOrder(SortCategory.FOLDER, ret)
         }
+
+        Library.TAG_LOCAL, Library.TAG_WEBDAV, Library.TAG_SMB -> {
+          settingVM.setSortOrder(SortCategory.SONG, ret)
+        }
       }
       expanded = false
-      vm.fetchMedia()
+      // 排序只需重排已有数据：不重新加载、不枚举远程音源（避免排序时反复加载与列表跳动）
+      when (library.tag) {
+        Library.TAG_SONG, Library.TAG_LOCAL, Library.TAG_WEBDAV, Library.TAG_SMB ->
+          vm.resortSongs()
+
+        else -> vm.fetchMedia(refreshRemote = false)
+      }
     }
 
     sortOrderItems.forEachIndexed { index, res ->

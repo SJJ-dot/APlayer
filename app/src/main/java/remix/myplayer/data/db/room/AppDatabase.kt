@@ -12,17 +12,27 @@ import remix.myplayer.data.db.DbMigrations.migration3to4
 import remix.myplayer.data.db.DbMigrations.migration4to5
 import remix.myplayer.data.db.DbMigrations.migration5to6
 import remix.myplayer.data.db.DbMigrations.migration6to7
+import remix.myplayer.data.db.DbMigrations.migration7to8
+import remix.myplayer.data.db.DbMigrations.migration8to9
+import remix.myplayer.data.db.DbMigrations.migration9to10
+import remix.myplayer.data.db.DbMigrations.migration10to11
+import remix.myplayer.data.db.DbMigrations.migration11to12
+import remix.myplayer.data.db.DbMigrations.migration12to13
 import remix.myplayer.data.db.room.dao.HistoryDao
 import remix.myplayer.data.db.room.dao.MetaDataCacheDao
 import remix.myplayer.data.db.room.dao.PlayListDao
 import remix.myplayer.data.db.room.dao.PlayQueueDao
+import remix.myplayer.data.db.room.dao.RemoteSongCacheDao
 import remix.myplayer.data.db.room.dao.SmbDao
+import remix.myplayer.data.db.room.dao.SourceConfigDao
 import remix.myplayer.data.db.room.dao.WebDavDao
 import remix.myplayer.data.db.room.entity.History
 import remix.myplayer.data.db.room.entity.MetaDataCache
 import remix.myplayer.data.db.room.entity.PlayList
 import remix.myplayer.data.db.room.entity.PlayQueue
+import remix.myplayer.data.db.room.entity.RemoteSongCache
 import remix.myplayer.data.db.room.entity.Smb
+import remix.myplayer.data.db.room.entity.SourceConfig
 import remix.myplayer.data.db.room.entity.WebDav
 import remix.myplayer.service.MusicService
 import remix.myplayer.ui.activity.base.BaseMusicActivity.Companion.EXTRA_PLAYLIST
@@ -39,7 +49,9 @@ import timber.log.Timber
     History::class,
     WebDav::class,
     Smb::class,
-    MetaDataCache::class
+    MetaDataCache::class,
+    SourceConfig::class,
+    RemoteSongCache::class
   ], version = AppDatabase.VERSION, exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -56,9 +68,13 @@ abstract class AppDatabase : RoomDatabase() {
 
   abstract fun metaDataCacheDao(): MetaDataCacheDao
 
+  abstract fun sourceConfigDao(): SourceConfigDao
+
+  abstract fun remoteSongCacheDao(): RemoteSongCacheDao
+
   companion object {
 
-    const val VERSION = 7
+    const val VERSION = 13
 
     @Volatile
     private var INSTANCE: AppDatabase? = null
@@ -83,6 +99,12 @@ abstract class AppDatabase : RoomDatabase() {
           .addMigrations(migration4to5)
           .addMigrations(migration5to6)
           .addMigrations(migration6to7)
+          .addMigrations(migration7to8)
+          .addMigrations(migration8to9)
+          .addMigrations(migration9to10)
+          .addMigrations(migration10to11)
+          .addMigrations(migration11to12)
+          .addMigrations(migration12to13)
           .build()
       database.invalidationTracker.addObserver(object :
         InvalidationTracker.Observer(PlayList.TABLE_NAME, PlayQueue.TABLE_NAME) {

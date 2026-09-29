@@ -9,6 +9,9 @@
   <string name="tab_folder">文件夹</string>
   <string name="tab_genre">流派</string>
   <string name="tab_remote">远程</string>
+  <string name="tab_local">本地</string>
+  <string name="tab_webdav">WebDAV</string>
+  <string name="tab_smb">SMB</string>
 
   <string name="drawer_song">歌曲库</string>
   <string name="drawer_recently_add">最近添加</string>
@@ -98,6 +101,16 @@
 
   <string name="new_folder">新建目录</string>
   <string name="choose_folder">选择</string>
+  <string name="set_as_music_folder">设为音乐目录</string>
+  <string name="music_folder_set">音乐目录已更新</string>
+  <string name="use_this_folder">使用此目录</string>
+  <string name="setting_source_desc">添加与管理远程音源</string>
+  <string name="local_music">本地音乐</string>
+  <string name="enable_local_music">启用本地音乐</string>
+  <string name="enable_local_music_tip">关闭后曲库不再显示本地歌曲</string>
+  <string name="auto_scan">自动扫描</string>
+  <string name="auto_scan_tip">本地音乐发生变化时自动刷新曲库</string>
+  <string name="load_failed_retry">加载失败，下拉可重试</string>
   <string name="setting_success">设置成功</string>
   <string name="setting_error">设置失败</string>
   <string name="search_error">查找失败</string>
@@ -521,6 +534,11 @@
 
   <string name="webdav">WebDav</string>
   <string name="dlna">DLNA</string>
+
+  <string name="source_manage">音源管理</string>
+  <string name="enabled">启用</string>
+  <string name="add_webdav">添加 WebDav</string>
+  <string name="add_smb">添加 SMB</string>
 
   <string name="alias">别名</string>
   <string name="account">账户</string>

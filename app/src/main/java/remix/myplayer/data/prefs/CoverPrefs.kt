@@ -6,6 +6,7 @@ import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import remix.myplayer.data.model.audio.Song
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -61,5 +62,12 @@ class CoverPrefs @Inject constructor(
     private const val KEY_ALBUM_VERSION = "album_version"
     private const val KEY_ARTIST_VERSION = "artist_version"
     private const val KEY_PLAYLIST_VERSION = "playlist_version"
+
+    /**
+     * 歌曲封面的持久化记录的 key。
+     * 远程歌曲 id 为负，统一用 `song-data:<url>`，元数据与封面两侧必须保持一致。
+     */
+    fun songCoverKey(song: Song): String =
+      if (song.id > 0) "song:${song.id}" else "song-data:${song.data}"
   }
 }

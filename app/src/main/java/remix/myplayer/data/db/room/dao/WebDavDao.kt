@@ -20,6 +20,9 @@ interface WebDavDao {
   )
   fun selectAll() : Flow<List<WebDav>>
 
+  @Query("SELECT * FROM WebDav WHERE id = :id")
+  suspend fun byId(id: Int): WebDav?
+
   @Delete
   suspend fun delete(webDav: WebDav): Int
 }

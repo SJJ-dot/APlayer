@@ -17,15 +17,16 @@ import remix.myplayer.viewmodel.settingViewModel
 private val items = intArrayOf(0, 500 * KB, MB, 2 * MB, 5 * MB)
 
 @Composable
-fun ScanSizeLogic() {
+fun ScanSizeLogic(enabled: Boolean = true) {
   val libraryVM = libraryViewModel
   val settingVM = settingViewModel
   val settingState by settingVM.settingsState.collectAsStateWithLifecycle()
 
   val scanSizeState = rememberDialogState(false)
   NormalPreference(
-    stringResource(R.string.music_filter),
-    stringResource(R.string.set_filter_size)
+    title = stringResource(R.string.music_filter),
+    content = stringResource(R.string.set_filter_size),
+    enabled = enabled
   ) {
     scanSizeState.show()
   }

@@ -15,7 +15,11 @@ data class Smb(
   var server: String,
   var share: String,
   var lastUrl: String,
-  val createAt: Long = System.currentTimeMillis()
+  val createAt: Long = System.currentTimeMillis(),
+  /** 音源导入根目录（相对于 [getRoot()] 的共享内路径）。null 表示整个共享。 */
+  var rootDir: String? = null,
+  /** 是否启用：禁用后不参与曲库枚举，已缓存的歌曲会被清出曲库 */
+  var enabled: Boolean = true
 ) : Serializable {
 
   @PrimaryKey(autoGenerate = true)
@@ -57,6 +61,20 @@ data class Smb(
       .split('/')
       .filter { it.isNotEmpty() }
       .runningFold(root) { acc, part -> "$acc/$part" }
+  }
+
+  /**
+   * 从 [generateUri] 生成的 smb url 中还原**共享内相对路径**（已解码），
+   * 用于删除等需要传给 SMB 客户端的场景。
+   * 例：`smb://user:pwd@host/share/a%20b/c.mp3` -> `a b/c.mp3`
+   */
+  fun relativePathOf(uri: String): String {
+    val withoutScheme = uri.removePrefix("smb://")
+    // 去掉 userInfo@
+    val afterUserInfo = withoutScheme.substringAfter('@', withoutScheme)
+    val segments = afterUserInfo.split('/').filter { it.isNotEmpty() }
+    // segments[0] = host，segments[1] = share，其余为共享内路径
+    return segments.drop(2).joinToString("/") { Uri.decode(it) }
   }
 
   fun generateUri(path: String): String {

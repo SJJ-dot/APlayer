@@ -6,7 +6,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import remix.myplayer.R
@@ -14,11 +13,15 @@ import remix.myplayer.data.db.room.entity.Smb
 import remix.myplayer.ui.widget.common.EditField
 import remix.myplayer.viewmodel.SmbViewModel
 
+/**
+ * [onPositive] 的最后一个参数 [onResult]：保存完成后回调，true 成功（弹窗关闭），
+ * false 失败（弹窗保持打开，输入不丢失，便于修改后重试）。
+ */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun AddSmbDialog(
   vm: SmbViewModel = viewModel(),
-  onPositive: (String, String, String, String, String, String, Smb?) -> Unit
+  onPositive: (String, String, String, String, String, String, Smb?, (Boolean) -> Unit) -> Unit
 ) {
   val state by vm.addSmbState.collectAsStateWithLifecycle()
 
@@ -35,14 +38,19 @@ fun AddSmbDialog(
 
   NormalDialog(
     dialogState = state.dialogState,
+    autoDismiss = false,
     onDismissRequest = {
       reset()
     },
-    titleRes = R.string.smb, // Need to make sure this string exists, or use string resource for "SMB"
+    titleRes = R.string.smb,
     positiveRes = if (state.editSmb == null) R.string.add else R.string.update,
     onPositive = {
-      reset()
-      onPositive(alias, domain, account, pwd, server, share, state.editSmb)
+      onPositive(alias, domain, account, pwd, server, share, state.editSmb) { success ->
+        if (success) {
+          reset()
+          state.dialogState.dismiss()
+        }
+      }
     },
     negativeRes = null,
     custom = {
@@ -73,7 +81,7 @@ fun AddSmbDialog(
           isError = pwd.isEmpty(),
           contentType = ContentType.Password,
           keyboardType = KeyboardType.Password,
-          visualTransformation = PasswordVisualTransformation()
+          isPassword = true
         ) {
           vm.updateAddSmbState(pwd = it)
         }

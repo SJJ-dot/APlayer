@@ -6,16 +6,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import remix.myplayer.R
 import remix.myplayer.data.db.room.entity.WebDav
 import remix.myplayer.ui.widget.common.EditField
 import remix.myplayer.viewmodel.webDavViewModel
 
+/**
+ * [onPositive] 的最后一个参数 [onResult]：保存完成后回调，true 成功（弹窗关闭），
+ * false 失败（弹窗保持打开，输入不丢失，便于修改后重试）。
+ */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun AddWebDavDialog(onPositive: (String, String, String, String, WebDav?) -> Unit) {
+fun AddWebDavDialog(onPositive: (String, String, String, String, WebDav?, (Boolean) -> Unit) -> Unit) {
   val vm = webDavViewModel
   val state by vm.addWebDavState.collectAsStateWithLifecycle()
 
@@ -30,14 +33,19 @@ fun AddWebDavDialog(onPositive: (String, String, String, String, WebDav?) -> Uni
 
   NormalDialog(
     dialogState = state.dialogState,
+    autoDismiss = false,
     onDismissRequest = {
       reset()
     },
     titleRes = R.string.webdav,
     positiveRes = if (state.editWebDav == null) R.string.add else R.string.update,
     onPositive = {
-      reset()
-      onPositive(alias, account, pwd, server, state.editWebDav)
+      onPositive(alias, account, pwd, server, state.editWebDav) { success ->
+        if (success) {
+          reset()
+          state.dialogState.dismiss()
+        }
+      }
     },
     negativeRes = null,
     custom = {
@@ -59,7 +67,7 @@ fun AddWebDavDialog(onPositive: (String, String, String, String, WebDav?) -> Uni
           isError = pwd.isEmpty(),
           contentType = ContentType.Password,
           keyboardType = KeyboardType.Password,
-          visualTransformation = PasswordVisualTransformation()
+          isPassword = true
         ) {
           vm.updateAddWebDavState(pwd = it)
         }

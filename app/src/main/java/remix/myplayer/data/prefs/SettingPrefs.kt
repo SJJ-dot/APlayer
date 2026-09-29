@@ -36,7 +36,22 @@ class SettingPrefs @Inject constructor(
 
   var scanSize by PrefsDelegate(sp, PrefKeys.Setting.SCAN_SIZE, MB)
 
+  /** 是否启用本地音乐：关闭后曲库不包含本地歌曲（含专辑/歌手/流派/文件夹聚合） */
+  var localMusicEnabled by PrefsDelegate(sp, PrefKeys.Setting.LOCAL_MUSIC_ENABLED, true)
+
+  /** 是否自动扫描本地音乐：MediaStore 变化时自动刷新曲库 */
+  var autoScanLocal by PrefsDelegate(sp, PrefKeys.Setting.AUTO_SCAN_LOCAL, true)
+
   var songSortOrder by PrefsDelegate(sp, PrefKeys.Setting.SONG_SORT_ORDER, SortOrder.SONG_A_Z)
+
+  init {
+    // 「文件名」排序已从歌曲列表移除（与标题重复）：历史值回退为对应的标题排序，
+    // 否则排序菜单找不到选中项
+    when (songSortOrder) {
+      SortOrder.DISPLAY_NAME_A_Z -> songSortOrder = SortOrder.SONG_A_Z
+      SortOrder.DISPLAY_NAME_Z_A -> songSortOrder = SortOrder.SONG_Z_A
+    }
+  }
   var albumSortOrder by PrefsDelegate(sp, PrefKeys.Setting.ALBUM_SORT_ORDER, SortOrder.ALBUM_A_Z)
   var artistSortOrder by PrefsDelegate(sp, PrefKeys.Setting.ARTIST_SORT_ORDER, SortOrder.ARTIST_A_Z)
   var playlistSortOrder by PrefsDelegate(
@@ -108,6 +123,11 @@ class SettingPrefs @Inject constructor(
 
   var manualScanFolder by PrefsDelegate(sp, PrefKeys.Setting.MANUAL_SCAN_FOLDER, "")
   var deleteIds by PrefsDelegate(sp, PrefKeys.Setting.BLACKLIST_SONG, emptySet<String>())
+  var deleteRemoteUrls by PrefsDelegate(
+    sp,
+    PrefKeys.Setting.BLACKLIST_REMOTE_URL,
+    emptySet<String>()
+  )
   var blacklist by PrefsDelegate(sp, PrefKeys.Setting.BLACKLIST, emptySet<String>())
   var deleteSource by PrefsDelegate(sp, PrefKeys.Setting.DELETE_SOURCE, false)
 

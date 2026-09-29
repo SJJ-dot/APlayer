@@ -20,6 +20,9 @@ interface SmbDao {
   )
   fun selectAll() : Flow<List<Smb>>
 
+  @Query("SELECT * FROM Smb WHERE id = :id")
+  suspend fun byId(id: Int): Smb?
+
   @Delete
   suspend fun delete(smb: Smb): Int
 }

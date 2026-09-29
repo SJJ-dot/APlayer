@@ -19,6 +19,9 @@ data class Library(
       TAG_GENRE -> R.string.tab_genre
       TAG_FOLDER -> R.string.tab_folder
       TAG_REMOTE -> R.string.tab_remote
+      TAG_LOCAL -> R.string.tab_local
+      TAG_WEBDAV -> R.string.tab_webdav
+      TAG_SMB -> R.string.tab_smb
       else -> throw IllegalArgumentException("unknown tag: $tag")
     }
 
@@ -27,8 +30,6 @@ data class Library(
       TAG_SONG -> listOf(
         R.string.title,
         R.string.title_desc,
-        R.string.display_title,
-        R.string.display_title_desc,
         R.string.album,
         R.string.album_desc,
         R.string.artist,
@@ -65,6 +66,17 @@ data class Library(
         R.string.name_desc
       )
 
+      TAG_LOCAL, TAG_WEBDAV, TAG_SMB -> listOf(
+        R.string.title,
+        R.string.title_desc,
+        R.string.album,
+        R.string.album_desc,
+        R.string.artist,
+        R.string.artist_desc,
+        R.string.date_modify,
+        R.string.date_modify_desc
+      )
+
       else -> throw IllegalArgumentException("unknown tag: $tag")
     }
 
@@ -73,8 +85,6 @@ data class Library(
       TAG_SONG -> listOf(
         SortOrder.SONG_A_Z,
         SortOrder.SONG_Z_A,
-        SortOrder.DISPLAY_NAME_A_Z,
-        SortOrder.DISPLAY_NAME_Z_A,
         SortOrder.ALBUM_A_Z,
         SortOrder.ALBUM_Z_A,
         SortOrder.ARTIST_A_Z,
@@ -111,6 +121,17 @@ data class Library(
         SortOrder.FOLDER_Z_A
       )
 
+      TAG_LOCAL, TAG_WEBDAV, TAG_SMB -> listOf(
+        SortOrder.SONG_A_Z,
+        SortOrder.SONG_Z_A,
+        SortOrder.ALBUM_A_Z,
+        SortOrder.ALBUM_Z_A,
+        SortOrder.ARTIST_A_Z,
+        SortOrder.ARTIST_Z_A,
+        SortOrder.DATE,
+        SortOrder.DATE_DESC
+      )
+
       else -> throw IllegalArgumentException("unknown tag: $tag")
     }
 
@@ -123,6 +144,9 @@ data class Library(
     const val TAG_PLAYLIST = 4
     const val TAG_FOLDER = 5
     const val TAG_REMOTE = 6
+    const val TAG_LOCAL = 7
+    const val TAG_WEBDAV = 8
+    const val TAG_SMB = 9
 
     val default = listOf(
       Library(TAG_SONG),
@@ -130,8 +154,9 @@ data class Library(
       Library(TAG_ARTIST),
       Library(TAG_GENRE),
       Library(TAG_PLAYLIST),
-      Library(TAG_FOLDER),
-      Library(TAG_REMOTE)
+      Library(TAG_LOCAL),
+      Library(TAG_WEBDAV),
+      Library(TAG_SMB)
     )
 
   }

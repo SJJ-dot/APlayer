@@ -1,6 +1,8 @@
 package remix.myplayer.ui.screen.webdav
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,9 +14,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,7 +34,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thegrizzlylabs.sardineandroid.DavResource
@@ -43,6 +51,8 @@ import remix.myplayer.data.model.audio.Song
 import remix.myplayer.service.Command
 import remix.myplayer.service.MusicService
 import remix.myplayer.service.MusicServiceRemote
+import remix.myplayer.ui.dialog.NormalDialog
+import remix.myplayer.ui.dialog.rememberDialogState
 import remix.myplayer.ui.dialog.runWithLoading
 import remix.myplayer.ui.nav.LocalNavController
 import remix.myplayer.ui.nav.MessageNotifier
@@ -57,19 +67,24 @@ import remix.myplayer.ui.widget.common.TextPrimary
 import remix.myplayer.ui.widget.common.TextSecondary
 import remix.myplayer.util.MusicUtil
 import remix.myplayer.util.Util
+import remix.myplayer.util.WebDavSardineFactory
 import remix.myplayer.util.ext.clickWithRipple
+import remix.myplayer.util.ext.clickableWithoutRipple
 import remix.myplayer.util.ext.isAudio
+import remix.myplayer.viewmodel.libraryViewModel
 import remix.myplayer.viewmodel.playbackViewModel
 import remix.myplayer.viewmodel.settingViewModel
 import remix.myplayer.viewmodel.webDavViewModel
 import java.util.concurrent.TimeUnit
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WebDavDetailScreen(webDav: WebDav) {
+fun WebDavDetailScreen(webDav: WebDav, pickMode: Boolean = false) {
   val nav = LocalNavController.current
   val webDavVM = webDavViewModel
   val playbackVM = playbackViewModel
   val settingVM = settingViewModel
+  val libraryVM = libraryViewModel
   val scope = rememberCoroutineScope()
   val resourceState by webDavVM.webDavResState.collectAsStateWithLifecycle()
 
@@ -88,16 +103,23 @@ fun WebDavDetailScreen(webDav: WebDav) {
   var refreshTrigger by remember {
     mutableIntStateOf(0)
   }
+  // 下拉刷新中
+  var refreshing by remember {
+    mutableStateOf(false)
+  }
 
-  val sardine = remember {
-    OkHttpSardine(
-      OkHttpClient.Builder()
-        .connectTimeout(20L, TimeUnit.SECONDS)
-        .readTimeout(20L, TimeUnit.SECONDS)
-        .writeTimeout(20L, TimeUnit.SECONDS)
-        .build()
-    ).apply {
-      setCredentials(webDav.account, webDav.pwd)
+  // 删除二次确认
+  val deleteDialogState = rememberDialogState()
+  var pendingDelete by remember { mutableStateOf<DavResource?>(null) }
+
+  val sardine = remember(webDav.id, webDav.account, webDav.pwd) {
+    WebDavSardineFactory.create(webDav.account, webDav.pwd)
+  }
+
+  // 离开页面时重置加载状态，避免下次进入读到残留 Error 而立即退出（白屏）
+  DisposableEffect(webDav.id) {
+    onDispose {
+      webDavVM.clearResState()
     }
   }
 
@@ -132,13 +154,16 @@ fun WebDavDetailScreen(webDav: WebDav) {
     LaunchedEffect(resourceState) {
       when (resourceState) {
         is DataUiState.Success -> {
+          refreshing = false
           davResources = resourceState.get()
           webDavVM.updateLastUrl(webDav, currentUrl)
         }
 
         is DataUiState.Error -> {
+          refreshing = false
           val ex = (resourceState as DataUiState.Error).throwable
           if (ex is SardineException && ex.statusCode == 404) {
+            // 路径确实不存在：回退到根目录或退出
             if (pathStack.size <= 1) {
               nav.popBackStack()
               MessageNotifier.show(R.string.load_failed)
@@ -147,8 +172,8 @@ fun WebDavDetailScreen(webDav: WebDav) {
               MessageNotifier.show(R.string.file_not_exist)
             }
           } else {
-            nav.popBackStack()
-            MessageNotifier.show(R.string.load_failed)
+            // 弱网 / 超时 / 认证失败等：留在当前页面，下拉可重试，不再直接退出
+            MessageNotifier.show(R.string.load_failed_retry)
           }
         }
 
@@ -158,6 +183,14 @@ fun WebDavDetailScreen(webDav: WebDav) {
 
     Column(modifier = Modifier.padding(contentPadding)) {
       Box(modifier = Modifier.weight(1f)) {
+        PullToRefreshBox(
+          isRefreshing = refreshing,
+          onRefresh = {
+            refreshing = true
+            refreshTrigger++
+          },
+          modifier = Modifier.fillMaxSize()
+        ) {
         LazyColumn(modifier = Modifier.fillMaxSize()) {
           items(davResources, key = { it.path }) { resource ->
             WebDavDetailItem(
@@ -168,8 +201,8 @@ fun WebDavDetailScreen(webDav: WebDav) {
                 if (resource.isDirectory) {
                   // 进入下级目录
                   pathStack.add(webDav.generateUrl(resource.path))
-                } else {
-                  // 过滤列表内所有音乐并设置为播放列表
+                } else if (!pickMode) {
+                  // 选目录模式下不播放；过滤列表内所有音乐并设置为播放列表
                   if (davResources.isEmpty()) {
                     return@WebDavDetailItem
                   }
@@ -228,18 +261,15 @@ fun WebDavDetailScreen(webDav: WebDav) {
                   }
 
                   R.string.delete -> {
-                    scope.runWithLoading {
-                      withContext(Dispatchers.IO) {
-                        sardine.delete(webDav.generateUrl(resource.path))
-                      }
-                      refreshTrigger++
-                    }
+                    pendingDelete = resource
+                    deleteDialogState.show()
                   }
                 }
               })
           }
         }
 
+        }
         if (showLoading) {
           LinearProgressIndicator(
             modifier = Modifier
@@ -249,9 +279,50 @@ fun WebDavDetailScreen(webDav: WebDav) {
           )
         }
       }
-      BottomBar()
+      if (pickMode) {
+        Box(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .height(44.dp)
+            .background(color = LocalTheme.current.primary, shape = RoundedCornerShape(22.dp))
+            .clickableWithoutRipple {
+              webDavVM.updateRootDir(webDav, currentUrl)
+              MessageNotifier.show(R.string.music_folder_set)
+              // 立即按新目录刷新远程曲库
+              libraryVM.fetchMedia()
+              nav.popBackStack()
+            },
+          contentAlignment = Alignment.Center
+        ) {
+          Text(
+            stringResource(R.string.use_this_folder),
+            color = Color.White
+          )
+        }
+      } else {
+        BottomBar()
+      }
     }
   }
+
+  NormalDialog(
+    dialogState = deleteDialogState,
+    title = stringResource(R.string.delete),
+    content = pendingDelete?.name ?: "",
+    onPositive = {
+      val target = pendingDelete ?: return@NormalDialog
+      pendingDelete = null
+      scope.runWithLoading {
+        withContext(Dispatchers.IO) {
+          sardine.delete(webDav.generateUrl(target.path))
+        }
+        // 同步刷新曲库（会清理该文件的缓存）
+        libraryVM.fetchMedia()
+        refreshTrigger++
+      }
+    }
+  )
 
   LaunchedEffect(currentUrl, refreshTrigger) {
     webDavVM.loadDavRes(sardine, currentUrl)
