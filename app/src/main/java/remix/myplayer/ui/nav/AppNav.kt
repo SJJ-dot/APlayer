@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
@@ -34,6 +35,9 @@ import androidx.navigation.navArgument
 import androidx.navigation.toRoute
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.savedstate.SavedState
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.serialization.InternalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -347,9 +351,19 @@ fun AppNav() {
     }
 
     LaunchedEffect(Unit) {
-      MessageNotifier.messages.collect {
+      MessageNotifier.messages.collect { message ->
+        // SnackbarDuration.Short 是 4 秒，偏长；这里固定停留 SNACKBAR_DURATION_MS 后主动关闭。
+        // 用 coroutineScope 把「显示 + 定时关闭」包成一次串行操作，
+        // 避免上一条的延时关闭误关掉刚刚弹出的下一条。
         snackBarHostState.currentSnackbarData?.dismiss()
-        snackBarHostState.showSnackbar(it)
+        coroutineScope {
+          val showing = launch {
+            snackBarHostState.showSnackbar(message, duration = SnackbarDuration.Indefinite)
+          }
+          delay(MessageNotifier.SNACKBAR_DURATION_MS)
+          snackBarHostState.currentSnackbarData?.dismiss()
+          showing.cancel()
+        }
       }
     }
   }

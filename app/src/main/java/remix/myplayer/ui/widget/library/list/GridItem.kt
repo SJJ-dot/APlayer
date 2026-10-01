@@ -53,7 +53,8 @@ fun GridItem(
       modifier = Modifier
         .fillMaxWidth()
         .aspectRatio(1f)
-        .clip(RoundedCornerShape(2.dp)),
+        // 圆角与歌曲行（ListSong 6dp）统一；原来 2dp 偏锐利
+        .clip(RoundedCornerShape(6.dp)),
       model = model,
       circle = false
     )

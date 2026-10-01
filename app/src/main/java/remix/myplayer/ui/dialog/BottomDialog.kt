@@ -22,6 +22,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -35,6 +36,8 @@ fun BottomDialog(
   visible: Boolean,
   onDismissRequest: (() -> Unit) = {},
   animationDurationMillis: Int = 220,
+  /** 弹窗底色。默认跟随主题的 dialogBackground；播放队列等需要与页面同色时可覆盖 */
+  containerColor: Color = LocalTheme.current.dialogBackground,
   content: @Composable BoxScope.() -> Unit
 ) {
   val visibleState = remember { MutableTransitionState(false) }
@@ -90,7 +93,7 @@ fun BottomDialog(
               indication = null,
               onClick = {}
             ),
-          color = theme.dialogBackground,
+          color = containerColor,
           shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
           shadowElevation = 8.dp,
         ) {

@@ -17,6 +17,13 @@ object MessageNotifier {
 
   private const val MIN_INTERVAL_MS = 1000L
 
+  /**
+   * 前台 Snackbar 的停留时长。
+   * Material3 只提供 Short(4 秒) / Long(10 秒) / Indefinite，没有更短的档位，
+   * 所以 AppNav 用 Indefinite + 延时主动 dismiss 的方式控制成这个时长。
+   */
+  const val SNACKBAR_DURATION_MS = 1800L
+
   @Volatile
   private var lastShownAt = 0L
 

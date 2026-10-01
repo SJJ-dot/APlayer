@@ -199,6 +199,7 @@
   <string name="sleep_timer">スリープタイマー</string>
   <string name="eq">イコライザー</string>
   <string name="collect">お気に入りに追加</string>
+  <string name="uncollect">お気に入りから削除</string>
   <string name="only_lollopop">Android 5.0 以降のみサポートされています</string>
   <string name="aplayer_lockscreen">APlayer ロック画面</string>
   <string name="system_lockscreen">システム ロック画面</string>

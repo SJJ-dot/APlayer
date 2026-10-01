@@ -94,6 +94,16 @@ class LibraryViewModel @Inject constructor(
   val playLists = playListRepo.allPlayLists()
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+  /**
+   * 收藏歌曲 id 集合，供歌曲列表 / 播放队列展示收藏状态。
+   *
+   * 由收藏夹（[PlayList.id] == 1，见 [PlayList.isFavorite]）的内容派生，
+   * 收藏或取消收藏后随 Room 变更自动刷新，不需要额外查询。
+   */
+  val favoriteSongIds: StateFlow<Set<Long>> = playLists
+    .map { lists -> lists.firstOrNull { it.isFavorite() }?.audioIds?.toSet() ?: emptySet() }
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+
   private val _folders = MutableStateFlow<List<Folder>>(emptyList())
   val folders: StateFlow<List<Folder>> = _folders.asStateFlow()
 
@@ -164,6 +174,18 @@ class LibraryViewModel @Inject constructor(
       } catch (ignore: Exception) {
         MessageNotifier.show(R.string.add_song_playlist_error)
       }
+    }
+  }
+
+  /**
+   * 切换收藏状态：未收藏则加入收藏夹，已收藏则移出。
+   *
+   * 与播放条的收藏按钮（Command.LOVE，走 [PlaybackFavoriteState]）复用同一套仓库逻辑；
+   * 切换后收藏夹内容变化会经 Room 回流到 [favoriteSongIds]，列表与播放条的心形标记自动刷新。
+   */
+  fun toggleFavorite(songId: Long) {
+    viewModelScope.launch {
+      playListRepo.toggleFavorite(songId)
     }
   }
 

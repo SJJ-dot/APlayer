@@ -215,6 +215,7 @@
   <string name="sleep_timer">Sleep timer</string>
   <string name="eq">Equalizer</string>
   <string name="collect">Add to my favorites</string>
+  <string name="uncollect">Remove from my favorites</string>
   <string name="only_lollopop">Only support Android 5.0 and above</string>
   <string name="aplayer_lockscreen">APlayer Lock-Screen</string>
   <string name="system_lockscreen">System Lock-Screen</string>

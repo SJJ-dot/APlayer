@@ -18,7 +18,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import remix.myplayer.R
 import remix.myplayer.data.model.audio.Song
 import remix.myplayer.data.prefs.SettingPrefs
@@ -35,11 +37,12 @@ fun SongListHeader(songs: List<Song>) {
   if (songs.isEmpty()) {
     return
   }
+  val theme = LocalTheme.current
   Row(
     modifier = Modifier
       .height(48.dp)
       .fillMaxWidth()
-      .background(LocalTheme.current.mainBackground)
+      .background(theme.mainBackground)
       .clickableWithoutRipple(remember { MutableInteractionSource() }) {
         if (songs.isEmpty()) {
           MessageNotifier.show(R.string.no_song)
@@ -50,14 +53,17 @@ fun SongListHeader(songs: List<Song>) {
     verticalAlignment = Alignment.CenterVertically
   ) {
     Icon(
-      modifier = Modifier.padding(start = 16.dp, end = 8.dp),
+      modifier = Modifier.padding(start = 16.dp, end = 10.dp),
       painter = painterResource(R.drawable.ic_shuffle_white_24dp),
-      tint = LocalTheme.current.secondary,
+      tint = theme.secondary,
       contentDescription = "ListHeaderIcon"
     )
+    // 用强调色 + 中等字重：这一行读起来是「可点的操作」，而不是灰色说明文字
     Text(
       text = stringResource(R.string.play_random, songs.size),
-      color = LocalTheme.current.textSecondary
+      color = theme.secondary,
+      fontSize = 14.sp,
+      fontWeight = FontWeight.Medium
     )
   }
 }

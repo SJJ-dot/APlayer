@@ -1,5 +1,6 @@
 package remix.myplayer.ui.screen
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -34,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -182,10 +185,16 @@ private fun ListSong(song: Song, checked: Boolean, onCheckedChange: (Boolean) ->
       },
     verticalAlignment = Alignment.CenterVertically
   ) {
+    // 与歌曲列表行（ListSong）保持同样的圆角与极细描边
+    val coverShape = RoundedCornerShape(6.dp)
     GlideCover(
       modifier = Modifier
         .padding(horizontal = 8.dp)
-        .size(42.dp), model = song, circle = false
+        .size(42.dp)
+        .clip(coverShape)
+        .border(0.5.dp, LocalTheme.current.textSecondary.copy(alpha = 0.18f), coverShape),
+      model = song,
+      circle = false
     )
 
     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.Center) {

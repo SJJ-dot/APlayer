@@ -46,7 +46,7 @@ import remix.myplayer.viewmodel.settingViewModel
 
 @Composable
 fun PlayingPanel(isVisible: Boolean) {
-  PlayingContainer {
+  PlayingContainer(isVisible) {
     val context = LocalContext.current
     if (context.isPortraitOrientation()) {
       Portrait(isVisible)

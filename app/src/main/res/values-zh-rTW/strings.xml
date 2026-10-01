@@ -199,6 +199,7 @@
   <string name="sleep_timer">睡眠定時</string>
   <string name="eq">等化器</string>
   <string name="collect">收藏</string>
+  <string name="uncollect">取消收藏</string>
   <string name="only_lollopop">僅支援 Android 5.0 及以上</string>
   <string name="aplayer_lockscreen">APlayer 螢幕保護程式</string>
   <string name="system_lockscreen">系統鎖定螢幕</string>

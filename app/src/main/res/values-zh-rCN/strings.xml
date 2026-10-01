@@ -213,6 +213,7 @@
   <string name="sleep_timer">睡眠定时</string>
   <string name="eq">均衡器</string>
   <string name="collect">收藏</string>
+  <string name="uncollect">取消收藏</string>
   <string name="only_lollopop">仅支持安卓5.0及以上</string>
   <string name="aplayer_lockscreen">APlayer锁屏</string>
   <string name="system_lockscreen">系统锁屏</string>

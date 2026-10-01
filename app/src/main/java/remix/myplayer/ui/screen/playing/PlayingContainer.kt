@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -27,51 +28,72 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import remix.myplayer.R
 import remix.myplayer.data.prefs.SettingPrefs
 import remix.myplayer.ui.theme.LocalTheme
+import remix.myplayer.ui.theme.StatusBarBackground
 import remix.myplayer.util.ThemeUtil
 import remix.myplayer.viewmodel.playbackViewModel
 import remix.myplayer.viewmodel.settingViewModel
 
+/**
+ * 播放页的「动态底色」——与「播放页背景」设置保持一致。
+ *
+ * 供播放页渐变顶部、底部播放条底色、状态栏图标判断共用，保证三处颜色统一。
+ * 返回 null 表示该场景没有与歌曲相关的颜色（深色主题、或未开启彩色背景）。
+ */
 @Composable
-fun PlayingContainer(content: @Composable () -> Unit) {
-  val settingState by settingViewModel.settingsState.collectAsStateWithLifecycle()
-  val context = LocalContext.current
+fun rememberPlayingDynamicColor(): Color? {
   val theme = LocalTheme.current
+  val settingState by settingViewModel.settingsState.collectAsStateWithLifecycle()
+  val swatch by playbackViewModel.swatch.collectAsStateWithLifecycle()
+  return when {
+    !theme.isLight -> null
+    settingState.playingScreen.background == SettingPrefs.BACKGROUND_ADAPTIVE_COLOR -> Color(swatch.rgb)
+    settingState.playingScreen.background == SettingPrefs.BACKGROUND_THEME -> theme.primary
+    else -> null
+  }
+}
+
+@Composable
+fun PlayingContainer(isVisible: Boolean = true, content: @Composable () -> Unit) {
+  val settingState by settingViewModel.settingsState.collectAsStateWithLifecycle()
+  val theme = LocalTheme.current
+  val dynamicColor = rememberPlayingDynamicColor()
   val initialColor = Color(
     ThemeUtil.resolveColor(
-      context,
+      LocalContext.current,
       R.attr.colorSurface,
       if (theme.isLight) Color.White.value.toInt() else Color.Black.value.toInt()
     )
   )
-
-  if (!theme.isLight) {
-    val background = theme.mainBackground
-    val brush = Brush.verticalGradient(colors = listOf(background, background))
-    Container(brush = brush, content = content)
-    return
+  // 渐变到封面取色的动画；只有「跟随封面取色」这一档才会用到它的中间值
+  val animatedColor = remember(initialColor) { Animatable(initialValue = initialColor) }
+  LaunchedEffect(dynamicColor, initialColor) {
+    animatedColor.animateTo(dynamicColor ?: initialColor, animationSpec = tween(600))
   }
 
-  when (settingState.playingScreen.background) {
-    SettingPrefs.BACKGROUND_ADAPTIVE_COLOR -> {
-      val swatch by playbackViewModel.swatch.collectAsStateWithLifecycle()
-      val color = remember(initialColor) { Animatable(initialValue = initialColor) }
-      val brush = Brush.verticalGradient(colors = listOf(color.value, initialColor))
-      Container(brush = brush, content = content)
+  val brush: Brush? = when {
+    !theme.isLight ->
+      Brush.verticalGradient(colors = listOf(theme.mainBackground, theme.mainBackground))
 
-      LaunchedEffect(swatch, initialColor) {
-        color.animateTo(Color(swatch.rgb), animationSpec = tween(600))
-      }
-    }
+    settingState.playingScreen.background == SettingPrefs.BACKGROUND_ADAPTIVE_COLOR ->
+      Brush.verticalGradient(colors = listOf(animatedColor.value, initialColor))
 
-    SettingPrefs.BACKGROUND_THEME -> {
-      val brush = Brush.verticalGradient(colors = listOf(theme.primary, initialColor))
-      Container(brush = brush, content = content)
-    }
+    settingState.playingScreen.background == SettingPrefs.BACKGROUND_THEME ->
+      Brush.verticalGradient(colors = listOf(theme.primary, initialColor))
 
-    else -> {
-      Container(brush = null, content = content)
-    }
+    else -> null
   }
+
+  // 状态栏压在渐变「顶部」的颜色上，所以图标深浅要按这个颜色判断
+  val statusBarColor = dynamicColor ?: theme.mainBackground
+  // 只有播放页可见时才接管状态栏外观，收起后还原成默认（跟随主题色顶栏）
+  LaunchedEffect(isVisible, statusBarColor) {
+    StatusBarBackground.set(if (isVisible) statusBarColor else null)
+  }
+  DisposableEffect(Unit) {
+    onDispose { StatusBarBackground.set(null) }
+  }
+
+  Container(brush = brush, content = content)
 }
 
 /**

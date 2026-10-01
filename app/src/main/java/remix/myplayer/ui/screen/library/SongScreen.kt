@@ -1,8 +1,10 @@
 package remix.myplayer.ui.screen.library
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -22,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -33,7 +36,6 @@ import remix.myplayer.service.Command
 import remix.myplayer.service.MusicService
 import remix.myplayer.service.MusicServiceRemote.setPlayQueue
 import remix.myplayer.ui.theme.LocalTheme
-import remix.myplayer.ui.widget.library.SongListHeader
 import remix.myplayer.ui.widget.library.list.ListSong
 import remix.myplayer.util.MusicUtil
 import remix.myplayer.util.ext.clickableWithoutRipple
@@ -83,10 +85,6 @@ fun SongScreen(
   }
 
   Column {
-    if (displaySongs.isNotEmpty()) {
-      SongListHeader(displaySongs)
-    }
-
     val selectedIds by remember {
       derivedStateOf {
         multiSelectState.selectedModels(MultiSelectState.Where.Song)
@@ -104,6 +102,8 @@ fun SongScreen(
       ) {
         LazyColumn(
           state = listState,
+          // 右下角「定位正在播放」的悬浮按钮会压住最后一行，按它的占位留出底部空间
+          contentPadding = PaddingValues(bottom = if (playingIndex >= 0) 72.dp else 0.dp),
           modifier = Modifier
             .fillMaxSize()
             .verticalScrollbar(listState)
@@ -151,7 +151,14 @@ fun SongScreen(
             .align(Alignment.BottomEnd)
             .padding(end = 16.dp, bottom = 16.dp)
             .size(44.dp)
+            // 阴影 + 极细描边，让悬浮按钮从列表内容上“浮”起来
+            .shadow(4.dp, CircleShape)
             .background(LocalTheme.current.dialogBackground, CircleShape)
+            .border(
+              0.5.dp,
+              LocalTheme.current.textSecondary.copy(alpha = 0.18f),
+              CircleShape
+            )
             .clickableWithoutRipple {
               scope.launch {
                 listState.animateScrollToItem(playingIndex)

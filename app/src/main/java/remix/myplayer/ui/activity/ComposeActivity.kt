@@ -75,7 +75,13 @@ class ComposeActivity : BaseMusicActivity() {
         }
         SideEffect {
           window.navigationBarColor = color.toArgb()
-          ThemeUtil.setLightNavigationBarAuto(this, theme.isPrimaryLight)
+          // 图标外观必须跟随「导航栏自身的底色」，而不是主题色：
+          // 未开启彩色导航栏时底色是白色，必须用深色图标（light appearance），
+          // 否则深色主题色（如默认紫色）下会变成白底白图标、按钮看不见。
+          ThemeUtil.setLightNavigationBarAuto(
+            this,
+            if (theme.coloredNaviBar) theme.isPrimaryLight else true
+          )
         }
 
         APlayerTheme {

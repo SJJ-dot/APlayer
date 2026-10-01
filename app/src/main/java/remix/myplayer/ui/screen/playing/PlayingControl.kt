@@ -59,7 +59,7 @@ import remix.myplayer.ui.dialog.BottomDialog
 import remix.myplayer.ui.nav.MessageNotifier
 import remix.myplayer.ui.theme.LocalTheme
 import remix.myplayer.ui.widget.common.TextPrimary
-import remix.myplayer.ui.widget.common.TextSecondary
+import remix.myplayer.ui.widget.library.list.ListSong
 import remix.myplayer.ui.widget.playpause.PlayPauseView
 import remix.myplayer.util.MusicUtil.makeCmdIntent
 import remix.myplayer.util.Util
@@ -212,8 +212,9 @@ internal fun PlayingControl(
   }
 }
 
+/** 播放队列弹窗。除播放页外，底部播放条（BottomBar）的「播放列表」按钮也直接复用 */
 @Composable
-private fun PlayQueueDialog(
+internal fun PlayQueueDialog(
   visible: Boolean,
   onDismissRequest: () -> Unit,
   musicState: PlaybackUiState
@@ -224,7 +225,9 @@ private fun PlayQueueDialog(
 
   BottomDialog(
     visible = visible,
-    onDismissRequest = onDismissRequest
+    onDismissRequest = onDismissRequest,
+    // 底色与歌曲列表一致：队列里的圆角卡片才能像歌曲列表那样从页面上“浮”出来
+    containerColor = LocalTheme.current.libraryBackground
   ) {
     Column {
       CenterInBox(
@@ -242,35 +245,27 @@ private fun PlayQueueDialog(
       val lazyState = rememberLazyListState()
       LazyColumn(state = lazyState) {
         itemsIndexed(songs, key = { _, song -> song.id }) { pos, song ->
-          Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-              .height(50.dp)
-              .clickWithRipple(false) {
-                sendLocalBroadcast(
-                  makeCmdIntent(Command.PLAY_AT)
-                    .putExtra(EXTRA_POSITION, pos)
-                )
-                onDismissRequest()
-              }) {
-            Column(
-              verticalArrangement = Arrangement.Center,
-              modifier = Modifier
-                .padding(horizontal = 16.dp)
-                .weight(1f)
-            ) {
-              if (!song.valid()) {
-                TextPrimary(stringResource(R.string.song_lose_effect))
-              } else {
-                TextPrimary(
-                  song.title,
-                  color = if (song == musicState.song) LocalTheme.current.secondary else LocalTheme.current.textPrimary
-                )
-                TextSecondary(song.artist)
-              }
-            }
-
-            if (song.valid()) {
+          // 与歌曲列表共用同一个 ListSong：封面、序号、标题、歌手、收藏标记、圆角卡片完全一致。
+          // 队列数据由 PlayQueueRepository 过滤，失效歌曲不会出现在这里。
+          ListSong(
+            modifier = Modifier.height(64.dp),
+            song = song,
+            modelParent = song,
+            selected = false,
+            // 按 id 比对（与列表一致），并用强调色把当前播放的这一行标出来
+            playing = song.id == musicState.song.id,
+            highlightPlaying = true,
+            num = pos + 1,
+            onClickSong = {
+              sendLocalBroadcast(
+                makeCmdIntent(Command.PLAY_AT)
+                  .putExtra(EXTRA_POSITION, pos)
+              )
+              onDismissRequest()
+            },
+            onLongClickSong = {},
+            trailing = {
+              // 队列行尾是「移出队列」，替代列表里的「更多」菜单
               CenterInBox(
                 modifier = Modifier
                   .clickWithRipple {
@@ -284,7 +279,7 @@ private fun PlayQueueDialog(
                 )
               }
             }
-          }
+          )
         }
       }
 

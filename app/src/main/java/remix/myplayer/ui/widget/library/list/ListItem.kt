@@ -1,6 +1,7 @@
 package remix.myplayer.ui.widget.library.list
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -11,11 +12,13 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import remix.myplayer.data.model.audio.APlayerModel
 import remix.myplayer.ui.theme.LocalTheme
@@ -47,10 +50,14 @@ fun ListItem(
       .background(if (selected) theme.select else theme.mainBackground),
     verticalAlignment = Alignment.CenterVertically
   ) {
+    // 圆角 + 极细描边与歌曲行（ListSong）保持一致：浅色封面在浅色背景上也有轮廓
+    val coverShape = RoundedCornerShape(6.dp)
     GlideCover(
       modifier = Modifier
         .padding(start = 8.dp)
-        .size(42.dp),
+        .size(42.dp)
+        .clip(coverShape)
+        .border(0.5.dp, theme.textSecondary.copy(alpha = 0.18f), coverShape),
       model = model,
       circle = false
     )

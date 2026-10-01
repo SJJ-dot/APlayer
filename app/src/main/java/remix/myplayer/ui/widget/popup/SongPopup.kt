@@ -35,7 +35,6 @@ import remix.myplayer.util.Constants
 import remix.myplayer.util.MusicUtil
 import remix.myplayer.util.Util
 import remix.myplayer.util.ext.clickWithRipple
-import remix.myplayer.viewmodel.libraryViewModel
 import remix.myplayer.viewmodel.playbackViewModel
 import remix.myplayer.viewmodel.settingViewModel
 import remix.myplayer.viewmodel.tagEditViewModel
@@ -83,7 +82,6 @@ private fun SongDropdownMenu(
       R.string.song_detail,
       R.string.song_edit,
 //      R.string.set_album_cover,
-      R.string.collect,
       R.string.share,
       R.string.ring,
       R.string.delete
@@ -92,7 +90,6 @@ private fun SongDropdownMenu(
   val settingVM = settingViewModel
   val tagEditVM = tagEditViewModel
   val playbackVM = playbackViewModel
-  val libraryVM = libraryViewModel
   val nav = LocalNavController.current
 
   DropdownMenu(
@@ -142,13 +139,6 @@ private fun SongDropdownMenu(
 
             R.string.set_album_cover -> {
               nav.navigate("${RouteCustomCoverCrop}/${song.albumId}/${Constants.ALBUM}")
-            }
-
-            R.string.collect -> {
-              val favorite =
-                libraryVM.playLists.value.firstOrNull { it.isFavorite() } ?: return@DropdownMenuItem
-
-              libraryVM.addSongsToPlayList(listOf(song.id), favorite.name)
             }
 
             R.string.ring -> {

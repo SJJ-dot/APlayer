@@ -4,6 +4,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import remix.myplayer.util.ext.activityViewModel
 import remix.myplayer.viewmodel.settings.SettingViewModel
 
@@ -32,6 +34,14 @@ val LocalPlaybackViewModel = compositionLocalOf<PlaybackViewModel> {
   error("PlaybackViewModel not provided")
 }
 
+/**
+ * 收藏歌曲 id 集合。
+ *
+ * 由 [ProvideViewModels] 在根部**统一订阅一次**后经此提供，歌曲列表与播放队列的 item
+ * 直接读取即可展示收藏状态，避免每个 item 各自订阅一份收藏数据。
+ */
+val LocalFavoriteSongIds = compositionLocalOf { emptySet<Long>() }
+
 
 @Composable
 fun ProvideViewModels(content: @Composable () -> Unit) {
@@ -45,7 +55,11 @@ fun ProvideViewModels(content: @Composable () -> Unit) {
     LocalSmbViewModel provides activityViewModel(),
     LocalPlaybackViewModel provides activityViewModel()
   ) {
-    content()
+    // 收藏状态是全局只读数据：在根部订阅一次即可，列表项直接读取 [LocalFavoriteSongIds]
+    val favoriteSongIds by libraryViewModel.favoriteSongIds.collectAsStateWithLifecycle()
+    CompositionLocalProvider(LocalFavoriteSongIds provides favoriteSongIds) {
+      content()
+    }
   }
 }
 

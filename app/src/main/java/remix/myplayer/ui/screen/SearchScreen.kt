@@ -107,7 +107,8 @@ fun SearchScreen() {
   Scaffold(
     modifier = Modifier.imePadding(),
     contentWindowInsets = WindowInsets.systemBars,
-    containerColor = LocalTheme.current.mainBackground,
+    // 与歌曲列表同底色，列表项的圆角卡片才有对比
+    containerColor = LocalTheme.current.libraryBackground,
     topBar = {
       val textFieldState = rememberTextFieldState()
       AnimatedContent(
