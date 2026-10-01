@@ -82,7 +82,8 @@ class InAppUpdater @Inject constructor(
     }
 
     val release = try {
-      githubApi.fetchLatestRelease("rRemix", "APlayer")
+      // 取本仓库（https://github.com/SJJ-dot/APlayer）的最新 Release 作为更新源
+      githubApi.fetchLatestRelease(REPO_OWNER, REPO_NAME)
     } catch (e: Exception) {
       Timber.tag(TAG).v("e: $e")
       return null
@@ -159,6 +160,10 @@ class InAppUpdater @Inject constructor(
   companion object {
 
     private const val TAG = "InAppUpdater"
+
+    /** 更新源仓库：https://github.com/SJJ-dot/APlayer/releases */
+    private const val REPO_OWNER = "SJJ-dot"
+    private const val REPO_NAME = "APlayer"
 
     private const val UNIQUE_NAME = "download_apk"
 

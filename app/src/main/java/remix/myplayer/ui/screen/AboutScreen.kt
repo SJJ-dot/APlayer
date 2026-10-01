@@ -76,7 +76,7 @@ import remix.myplayer.util.ext.zipOutputStream
 import timber.log.Timber
 import java.io.File
 
-private const val REPO_URL = "https://github.com/rRemix/APlayer"
+private const val REPO_URL = "https://github.com/SJJ-dot/APlayer"
 private const val RELEASES_URL = "$REPO_URL/releases"
 private const val PRIVACY_POLICY_URL = "$REPO_URL/blob/master/PrivacyPolicy.md"
 private const val PLAY_STORE_PACKAGE = "com.android.vending"

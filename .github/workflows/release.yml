@@ -1,0 +1,138 @@
+name: Release (Debug signed)
+
+# 使用仓库内的 app/Debug.jks（debug 签名）构建 release APK，并发布到 GitHub Release。
+# 触发方式：
+#   1. push tag（形如 v2.1.2.1）
+#   2. 手动 workflow_dispatch，可指定 tag；留空则自动生成 debug-YYYYmmdd-HHMM
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '发布 tag（如 v2.1.2.1）；留空自动生成 debug-YYYYmmdd-HHMM'
+        required: false
+        type: string
+
+# 创建 / 更新 Release 需要写权限
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # 两个 flavor × 多个 ABI 的原生编译较慢，给足时间
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # taglib / media3 及其嵌套子模块都是构建必需
+          submodules: recursive
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+
+      # app 与 taglib 都要求 CMake 4.1.2 + NDK 28.2.13676358，runner 镜像未必自带
+      - name: Install CMake and NDK
+        run: |
+          SDK="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" \
+            "cmake;4.1.2" "ndk;28.2.13676358" > /dev/null
+          echo "cmake versions:"; ls "$SDK/cmake"
+          echo "ndk versions:";   ls "$SDK/ndk"
+
+      # build.gradle.kts 从 local.properties 读取 keystore.* 指向签名文件；
+      # 这里指向仓库内的 app/Debug.jks，即用 debug 签名打包 release。
+      # 注意：属性文件按 ISO-8859-1 解析，内容必须保持纯 ASCII。
+      - name: Prepare local.properties (debug keystore)
+        env:
+          LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
+          GOOGLE_PLAY_LICENSE_KEY: ${{ secrets.GOOGLE_PLAY_LICENSE_KEY }}
+          BUGLY_APP_ID: ${{ secrets.BUGLY_APP_ID }}
+          BUGLY_APP_KEY: ${{ secrets.BUGLY_APP_KEY }}
+        run: |
+          cat > local.properties <<EOF
+          keystore.storeFile=${GITHUB_WORKSPACE}/app/Debug.jks
+          keystore.storePassword=123456
+          keystore.keyAlias=Debug
+          keystore.keyPassword=123456
+          LASTFM_API_KEY=${LASTFM_API_KEY:-}
+          GOOGLE_PLAY_LICENSE_KEY=${GOOGLE_PLAY_LICENSE_KEY:-}
+          BUGLY_APP_ID=${BUGLY_APP_ID:-}
+          BUGLY_APP_KEY=${BUGLY_APP_KEY:-}
+          EOF
+          # 只回显签名文件路径，避免把密码打进日志
+          grep '^keystore.storeFile=' local.properties
+
+      - name: Resolve release tag
+        id: tag
+        env:
+          TZ: Asia/Shanghai
+        run: |
+          TAG="${{ github.event_name == 'push' && github.ref_name || github.event.inputs.tag }}"
+          if [ -z "$TAG" ]; then
+            TAG="debug-$(date +'%Y%m%d-%H%M')"
+          fi
+          echo "name=$TAG" >> "$GITHUB_OUTPUT"
+          echo "release tag = $TAG"
+
+      # 应用内「检查更新」用 Release 名称的第二段（按 "-" 分割索引 2）与本地 versionCode 比较，
+      # 因此名称必须写成 Release-v<versionName>-<versionCode>，例如 Release-v2.1.2.1-21201。
+      - name: Resolve release name
+        id: version
+        run: |
+          VERSION_NAME=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts)
+          VERSION_CODE=$(grep -oP 'versionCode\s*=\s*\K[0-9]+' app/build.gradle.kts)
+          echo "versionName = $VERSION_NAME"
+          echo "versionCode = $VERSION_CODE"
+          echo "release_name=Release-v${VERSION_NAME}-${VERSION_CODE}" >> "$GITHUB_OUTPUT"
+
+      - name: Build release APKs
+        run: |
+          ./gradlew :app:assembleNormalRelease :app:assembleFossRelease --stacktrace
+
+      - name: Verify APK outputs
+        run: |
+          find app/build/outputs/apk feature_smb/build/outputs/apk \
+            -name '*.apk' 2>/dev/null || true
+          COUNT=$(find app/build/outputs/apk feature_smb/build/outputs/apk \
+            -name '*.apk' 2>/dev/null | wc -l | tr -d ' ')
+          echo "APK count = $COUNT"
+          test "$COUNT" -gt 0
+
+      # 确认产物确实由 app/Debug.jks 签名（CN=Debug），防止签名配置失效却静默发出未签名包
+      - name: Verify APKs are debug-signed
+        run: |
+          SDK="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          APKSIGNER=$(ls "$SDK"/build-tools/*/apksigner | sort -V | tail -1)
+          for apk in $(find app/build/outputs/apk -name '*.apk'); do
+            echo "== $apk"
+            "$APKSIGNER" verify --print-certs "$apk" \
+              | grep -E 'Signer #1 certificate DN|Signer #1 certificate SHA-256' || true
+          done
+
+      - name: Upload APKs to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.name }}
+          # 形如 Release-v2.1.2.1-21201，供应用内「检查更新」解析 versionCode
+          name: ${{ steps.version.outputs.release_name }}
+          # 依据提交记录自动生成发布说明
+          generate_release_notes: true
+          # feature_smb 的 APK 是否单独产出随 AGP 版本而异，缺失时不判失败
+          fail_on_unmatched_files: false
+          files: |
+            app/build/outputs/apk/*/release/*.apk
+            feature_smb/build/outputs/apk/*/release/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
