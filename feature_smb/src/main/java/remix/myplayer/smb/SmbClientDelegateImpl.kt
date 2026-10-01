@@ -3,6 +3,7 @@ package remix.myplayer.smb
 import androidx.annotation.Keep
 import com.hierynomus.mserref.NtStatus
 import com.hierynomus.mssmb2.SMBApiException
+import com.hierynomus.protocol.transport.TransportException
 import com.hierynomus.smbj.SMBClient
 import com.hierynomus.smbj.auth.AuthenticationContext
 import com.hierynomus.smbj.share.DiskShare
@@ -12,6 +13,13 @@ import remix.myplayer.data.db.room.entity.Smb
 import remix.myplayer.data.model.smb.SmbClientDelegate
 import remix.myplayer.data.model.smb.SmbException
 import remix.myplayer.data.model.smb.SmbFile
+
+/** 鉴权类 NT 状态：账号密码错误、无访问权限、账号被禁用、密码过期 */
+private fun NtStatus.isAuthFailure(): Boolean =
+  this == NtStatus.STATUS_LOGON_FAILURE ||
+      this == NtStatus.STATUS_ACCESS_DENIED ||
+      this == NtStatus.STATUS_ACCOUNT_DISABLED ||
+      this == NtStatus.STATUS_PASSWORD_EXPIRED
 
 @Keep
 class SmbClientDelegateImpl : SmbClientDelegate {
@@ -24,12 +32,19 @@ class SmbClientDelegateImpl : SmbClientDelegate {
           val connection = if (port != null) client.connect(host, port) else client.connect(host)
           connection.use {
             val authContext = AuthenticationContext(smb.account, smb.pwd.toCharArray(), smb.domain)
-            val session = connection.authenticate(authContext)
+            // 认证阶段的失败一律按「登录失败」处理（账号密码错误 / 账号被禁用 / 鉴权协议失败等）；
+            // 传输层异常（连接被重置等）按网络错误处理，避免误判为登录失败而清空该音源数据
+            val session = try {
+              connection.authenticate(authContext)
+            } catch (e: TransportException) {
+              throw SmbException(e.message, e)
+            } catch (e: Exception) {
+              throw SmbException(e.message, e, isAuthFailed = true)
+            }
             session.use {
               val diskShare = session.connectShare(smb.share) as DiskShare
               diskShare.use { share ->
                 val relativePath = smb.getRelativePath(url).replace('/', '\\')
-
                 val fileInfos = share.list(relativePath)
                 fileInfos.map {
                   val fileName = it.fileName
@@ -51,9 +66,14 @@ class SmbClientDelegateImpl : SmbClientDelegate {
         }
       } catch (e: SMBApiException) {
         throw SmbException(
-          e.message, e, e.status == NtStatus.STATUS_OBJECT_NAME_NOT_FOUND ||
-              e.status == NtStatus.STATUS_OBJECT_PATH_NOT_FOUND
+          e.message, e,
+          isNotFound = e.status == NtStatus.STATUS_OBJECT_NAME_NOT_FOUND ||
+              e.status == NtStatus.STATUS_OBJECT_PATH_NOT_FOUND,
+          isAuthFailed = e.status.isAuthFailure()
         )
+      } catch (e: SmbException) {
+        // 认证阶段已判定为登录失败的异常：保持原样向上抛出，不要在此丢失标记
+        throw e
       } catch (e: Exception) {
         throw SmbException(e.message, e)
       }

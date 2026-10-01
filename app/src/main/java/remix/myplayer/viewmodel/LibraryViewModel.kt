@@ -41,6 +41,9 @@ import remix.myplayer.repo.HistoryRepository
 import remix.myplayer.repo.PlayListRepository
 import remix.myplayer.repo.SongRepository
 import remix.myplayer.repo.UnifiedLibraryRepository
+import remix.myplayer.repo.source.RemoteEnumerationException
+import remix.myplayer.repo.source.RemoteRefreshResult
+import remix.myplayer.repo.source.RemoteSourceFailure
 import remix.myplayer.repo.usecase.ExportPlayListUseCase
 import remix.myplayer.repo.usecase.PlayFromUriUseCase
 import remix.myplayer.service.MusicEventCallback
@@ -50,6 +53,10 @@ import remix.myplayer.ui.nav.MessageNotifier
 import remix.myplayer.util.PermissionUtil
 import remix.myplayer.util.ext.checkWorkerThread
 import timber.log.Timber
+import java.io.InterruptedIOException
+import java.net.ConnectException
+import java.net.SocketException
+import java.net.UnknownHostException
 import javax.inject.Inject
 
 @HiltViewModel
@@ -219,8 +226,12 @@ class LibraryViewModel @Inject constructor(
     updateAlbumVersion: Boolean = false,
     updateArtistVersion: Boolean = false,
     updatePlayListVersion: Boolean = false,
-    /** 是否在后台重新枚举远程音源；排序等只需重排的场景传 false，避免无谓加载 */
-    refreshRemote: Boolean = true
+    /**
+     * 是否在后台重新枚举远程音源。默认 **false**：远程列表只在音源配置变化
+     * （新增/编辑/启停/删除/切换导入目录）与用户主动下拉刷新时重新枚举，
+     * 其余场景（启动、本地媒体变化、标签编辑、改设置等）仅展示本地缓存，避免无谓网络加载。
+     */
+    refreshRemote: Boolean = false
   ) {
     viewModelScope.launch {
       if (clear) {
@@ -257,9 +268,18 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
           _refreshing.value = true
           try {
-            val remoteSongs = async(Dispatchers.IO) { unifiedLibraryRepository.refreshRemote() }.await()
-            _songs.value = mergeSongs(_songs.value.filter { it.isLocal() }, remoteSongs)
-            applyRemoteAggregation(remoteSongs, localAlbums, localArtists, localGenres)
+            when (val result = unifiedLibraryRepository.refreshRemote()) {
+              is RemoteRefreshResult.Success -> {
+                _songs.value = mergeSongs(_songs.value.filter { it.isLocal() }, result.songs)
+                applyRemoteAggregation(result.songs, localAlbums, localArtists, localGenres)
+                // 部分音源枚举失败：列表保留其缓存内容，仅提示失败与原因
+                if (result.failures.isNotEmpty()) {
+                  showRemoteLoadFailed(result.failures)
+                }
+              }
+              // 刷新整体失败：不清空本地缓存的列表，保留当前展示内容，仅提示失败与原因
+              is RemoteRefreshResult.Failure -> showRemoteLoadFailed(result.cause)
+            }
           } finally {
             _refreshing.value = false
           }
@@ -270,6 +290,45 @@ class LibraryViewModel @Inject constructor(
         if (localMusicEnabled) async(Dispatchers.IO) { folderRepo.allFolders() }.await() else emptyList()
       Timber.v("songCount: ${_songs.value.size} albumCount: ${_albums.value.size} artistCount: ${_artists.value.size} genreCount: ${_genres.value.size} folderCount: ${_folders.value.size}")
     }
+  }
+
+  /** 远程音源加载失败：提示各失败音源及其原因，列表保持原有（缓存）内容不变 */
+  private fun showRemoteLoadFailed(failures: List<RemoteSourceFailure>) {
+    if (failures.isEmpty()) {
+      return
+    }
+    val reasons = failures.joinToString("; ") { "${it.alias}: ${failureReason(it.cause)}" }
+    MessageNotifier.show(R.string.remote_load_failed, reasons)
+  }
+
+  /** 远程音源加载整体失败：提示失败与原因，列表保持原有内容不变 */
+  private fun showRemoteLoadFailed(cause: Throwable) {
+    MessageNotifier.show(R.string.remote_load_failed, failureReason(cause))
+  }
+
+  /** 从异常中提取可展示的失败原因：登录失败 / 网络错误 / 模块未安装 / 其它原始信息 */
+  private fun failureReason(t: Throwable): String = when {
+    t is RemoteEnumerationException.ModuleMissing -> context.getString(R.string.smb_module_not_installed)
+    t is RemoteEnumerationException.AuthFailed -> context.getString(R.string.remote_login_failed)
+    t.isNetworkFailure() -> context.getString(R.string.remote_load_network_error)
+    else -> t.localizedMessage?.takeIf { it.isNotBlank() } ?: t.javaClass.simpleName
+  }
+
+  /** 网络类错误（DNS 解析失败、连接被拒、连接/读取超时等）统一提示“网络错误” */
+  private fun Throwable.isNetworkFailure(): Boolean {
+    var current: Throwable? = this
+    var depth = 0
+    while (current != null && depth < 8) {
+      when (current) {
+        is UnknownHostException,
+        is ConnectException,
+        is SocketException,
+        is InterruptedIOException -> return true
+      }
+      current = current.cause
+      depth++
+    }
+    return false
   }
 
   /**

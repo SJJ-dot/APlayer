@@ -149,8 +149,11 @@ class SmbViewModel @Inject constructor(
   /**
    * 保存导入根目录，并把浏览位置重置到该目录。
    * [relativePath] 为共享内相对路径，根级（空串）时清除 [Smb.rootDir] 即导入整个共享。
+   *
+   * 为 suspend 方法：调用方需在本方法**返回后**再刷新曲库，确保后台枚举读到的是新 rootDir，
+   * 否则会按旧目录做 diff，导致新目录下的歌曲无法立即导入。
    */
-  fun updateRootDir(smb: Smb, relativePath: String, currentUrl: String) = viewModelScope.launch {
+  suspend fun updateRootDir(smb: Smb, relativePath: String, currentUrl: String) {
     val updated = smb.copy(
       rootDir = relativePath.trim { it == '/' || it == '\\' }.takeIf { it.isNotEmpty() },
       lastUrl = if (currentUrl.isNotBlank()) currentUrl else smb.lastUrl

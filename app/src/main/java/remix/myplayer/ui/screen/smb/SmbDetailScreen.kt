@@ -41,6 +41,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import remix.myplayer.R
 import remix.myplayer.data.db.room.entity.Smb
 import remix.myplayer.data.model.audio.Song
@@ -292,11 +293,13 @@ fun SmbDetailScreen(smb: Smb, pickMode: Boolean = false) {
             .height(44.dp)
             .background(color = LocalTheme.current.primary, shape = RoundedCornerShape(22.dp))
             .clickableWithoutRipple {
-              smbVM.updateRootDir(smb, smb.getRelativePath(currentUrl), currentUrl)
-              MessageNotifier.show(R.string.music_folder_set)
-              // 立即按新目录刷新远程曲库
-              libraryVM.fetchMedia()
-              nav.popBackStack()
+              scope.launch {
+                // 先落库新的导入目录，再按新目录重新枚举远程曲库（音源配置变化）
+                smbVM.updateRootDir(smb, smb.getRelativePath(currentUrl), currentUrl)
+                MessageNotifier.show(R.string.music_folder_set)
+                libraryVM.fetchMedia(refreshRemote = true)
+                nav.popBackStack()
+              }
             },
           contentAlignment = Alignment.Center
         ) {
@@ -321,8 +324,8 @@ fun SmbDetailScreen(smb: Smb, pickMode: Boolean = false) {
       scope.runWithLoading {
         if (smbVM.deleteRemoteFile(smb, target.path)) {
           MessageNotifier.show(R.string.delete_success)
-          // 同步刷新曲库（会清理该文件的缓存）
-          libraryVM.fetchMedia()
+          // 用户主动删除远端文件：重新枚举以清理该文件的缓存
+          libraryVM.fetchMedia(refreshRemote = true)
           refreshTrigger++
         }
       }

@@ -111,6 +111,10 @@
   <string name="auto_scan">Auto scan</string>
   <string name="auto_scan_tip">Refresh the library automatically when local music changes</string>
   <string name="load_failed_retry">Load failed, pull down to retry</string>
+  <string name="remote_load_failed">Failed to load remote sources: %1$s</string>
+  <string name="remote_load_network_error">Network error</string>
+  <string name="remote_login_failed">Login failed</string>
+  <string name="smb_module_not_installed">SMB module not installed</string>
   <string name="setting_success">Set successfully</string>
   <string name="setting_error">Set failed</string>
   <string name="search_error">Search failed</string>

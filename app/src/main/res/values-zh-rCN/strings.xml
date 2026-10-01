@@ -111,6 +111,10 @@
   <string name="auto_scan">自动扫描</string>
   <string name="auto_scan_tip">本地音乐发生变化时自动刷新曲库</string>
   <string name="load_failed_retry">加载失败，下拉可重试</string>
+  <string name="remote_load_failed">远程音源加载失败：%1$s</string>
+  <string name="remote_load_network_error">网络错误</string>
+  <string name="remote_login_failed">登录失败</string>
+  <string name="smb_module_not_installed">SMB 模块未安装</string>
   <string name="setting_success">设置成功</string>
   <string name="setting_error">设置失败</string>
   <string name="search_error">查找失败</string>

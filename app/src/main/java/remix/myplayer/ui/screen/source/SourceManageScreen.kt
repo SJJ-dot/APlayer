@@ -144,7 +144,8 @@ fun SourceManageScreen() {
               // 必须先等禁用清理（写库 + 清缓存）完成，再刷新曲库：
               // 并发执行时后台枚举可能读到旧的 enabled 状态并把歌曲重新写回缓存
               webDavVM.setEnabled(webDav, enabled)
-              libraryVM.fetchMedia()
+              // 音源配置变化：重新枚举远程音源
+              libraryVM.fetchMedia(refreshRemote = true)
             }
           },
           onRowClick = { nav.navigate(WebDavPickRoute(webDav.id)) }
@@ -175,7 +176,8 @@ fun SourceManageScreen() {
             scope.launch {
               // 先完成禁用清理，再刷新曲库（避免读到旧状态把歌曲写回）
               smbVM.setEnabled(smb, enabled)
-              libraryVM.fetchMedia()
+              // 音源配置变化：重新枚举远程音源
+              libraryVM.fetchMedia(refreshRemote = true)
             }
           },
           onRowClick = { nav.navigate(SmbPickRoute(smb.id)) }
@@ -293,8 +295,8 @@ fun SourceManageScreen() {
       pendingDeleteSmb?.let { smbVM.deleteSmb(it) }
       pendingDeleteWebDav = null
       pendingDeleteSmb = null
-      // 立即刷新歌曲列表
-      libraryVM.fetchMedia()
+      // 音源配置变化：立即刷新歌曲列表并重新枚举剩余音源
+      libraryVM.fetchMedia(refreshRemote = true)
     }
   )
 }

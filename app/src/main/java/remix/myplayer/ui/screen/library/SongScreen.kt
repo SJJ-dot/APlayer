@@ -97,8 +97,8 @@ fun SongScreen(
       PullToRefreshBox(
         isRefreshing = refreshing,
         onRefresh = {
-          // 下拉刷新：重新加载曲库并重新枚举远程音源（弱网下可手动重试）
-          libraryVM.fetchMedia()
+          // 用户主动下拉：重新加载曲库并重新枚举远程音源（弱网下可手动重试）
+          libraryVM.fetchMedia(refreshRemote = true)
         },
         modifier = Modifier.fillMaxSize()
       ) {

@@ -1,5 +1,6 @@
 package remix.myplayer.repo.source
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -23,12 +24,32 @@ import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** 单个远程音源枚举失败的信息：音源别名 + 失败原因 */
+data class RemoteSourceFailure(val alias: String, val cause: Throwable)
+
+/**
+ * 远程曲库刷新结果。
+ *
+ * - [Success.songs]：刷新后（取自持久缓存）的完整远程歌曲列表；
+ *   [Success.failures]：本次枚举失败、其缓存被**原样保留**的音源列表。
+ * - [Failure]：刷新整体失败（如读取音源配置异常）。此时调用方应**保留原有列表**，仅提示失败原因。
+ */
+sealed interface RemoteRefreshResult {
+  data class Success(
+    val songs: List<Song.Remote>,
+    val failures: List<RemoteSourceFailure>
+  ) : RemoteRefreshResult
+
+  data class Failure(val cause: Throwable) : RemoteRefreshResult
+}
+
 /**
  * 远程音源（WebDAV / SMB）歌曲的持久缓存与增量刷新中心。
  *
  * - [loadCached]：从 [RemoteSongCache] 表离线读取全部远程歌曲，启动即可立即展示，不触网。
  * - [refresh]：后台递归枚举各远程源，按 [RemoteSongCache.sourceKey] 做差异合并——
  *   新增或文件大小/修改时间变化的才重新解析元数据并回写缓存；远端已删除的清理缓存。
+ *   枚举失败的音源整体跳过 diff，其缓存原样保留，失败原因随结果返回。
  * - [get]/[getCached]：作为负 id 的稳定解析器，供收藏 / 历史 / 歌单读取还原完整 [Song.Remote]。
  */
 @Singleton
@@ -87,15 +108,26 @@ class RemoteSongLookup @Inject constructor(
   /**
    * 后台增量刷新：枚举远程源并与缓存做 diff。仅对“新增/变更”文件解析元数据（网络），
    * 删除远端已不存在的缓存项；未变化的文件直接复用缓存，避免重复网络解析。
-   * 返回刷新后的完整远程歌曲列表（取自缓存表，保证与持久化一致）。
+   *
+   * **枚举失败的音源会被整体跳过**：不解析元数据、也不做 diff，因此其本地缓存保持原样，
+   * 不会被误判为“远端已删除”而清空。
+   *
+   * 区分两类失败：
+   * - 网络 / 超时 / 服务器错误（[RemoteEnumerationException.Failed]）→ 保留缓存，仅提示原因；
+   * - 登录 / 鉴权失败（[RemoteEnumerationException.AuthFailed]）→ 凭据已不可用，清空该音源缓存。
+   *
+   * 失败原因随 [RemoteRefreshResult] 返回，供 UI 提示。
    */
-  suspend fun refresh(): List<Song.Remote> = withContext(Dispatchers.IO) {
+  suspend fun refresh(): RemoteRefreshResult = withContext(Dispatchers.IO) {
+    val failures = mutableListOf<RemoteSourceFailure>()
     val removedUrls = mutableSetOf<String>()
     val webDavs = try {
       webDavRepository.allWebDav().first()
+    } catch (e: CancellationException) {
+      throw e
     } catch (e: Exception) {
       Timber.e(e, "refresh webdav list failed")
-      emptyList<remix.myplayer.data.db.room.entity.WebDav>()
+      return@withContext RemoteRefreshResult.Failure(e)
     }
     for (wd in webDavs) {
       // 已禁用的音源：不枚举，并清掉已缓存歌曲（使其立即从曲库消失）
@@ -105,9 +137,15 @@ class RemoteSongLookup @Inject constructor(
       }
       // 仅导入所选目录（rootDir）下的文件，未设置时从服务器根导入
       val root = wd.rootDir?.takeIf { it.isNotBlank() } ?: wd.getRoot()
-      val songs = runCatching { enumerator.enumerateWebDav(wd, root, true) }
-        .getOrNull() ?: run {
-        Timber.w("enumerate webdav failed: ${wd.alias}")
+      val songs = try {
+        enumerator.enumerateWebDav(wd, root, true)
+      } catch (e: RemoteEnumerationException) {
+        Timber.w(e, "enumerate webdav failed: ${wd.alias}")
+        failures += RemoteSourceFailure(wd.alias, e)
+        if (e is RemoteEnumerationException.AuthFailed) {
+          // 登录失败（凭据失效 / 无权限）：清空该音源的缓存数据，避免继续展示无法播放的旧列表
+          removedUrls += applyDiff("webdav:${wd.server}", SourceType.WEBDAV.ordinal, emptyList())
+        }
         continue
       }
       removedUrls += applyDiff("webdav:${wd.server}", SourceType.WEBDAV.ordinal, songs)
@@ -115,9 +153,11 @@ class RemoteSongLookup @Inject constructor(
 
     val smbs = try {
       smbRepository.allSmb().first()
+    } catch (e: CancellationException) {
+      throw e
     } catch (e: Exception) {
       Timber.e(e, "refresh smb list failed")
-      emptyList<remix.myplayer.data.db.room.entity.Smb>()
+      return@withContext RemoteRefreshResult.Failure(e)
     }
     for (smb in smbs) {
       // 已禁用的音源：不枚举，并清掉已缓存歌曲（使其立即从曲库消失）
@@ -132,9 +172,15 @@ class RemoteSongLookup @Inject constructor(
       } else {
         "${smb.getRoot().removeSuffix("/")}/$relativeRoot"
       }
-      val songs = runCatching { enumerator.enumerateSmb(smb, root, true) }
-        .getOrNull() ?: run {
-        Timber.w("enumerate smb failed: ${smb.alias}")
+      val songs = try {
+        enumerator.enumerateSmb(smb, root, true)
+      } catch (e: RemoteEnumerationException) {
+        Timber.w(e, "enumerate smb failed: ${smb.alias}")
+        failures += RemoteSourceFailure(smb.alias, e)
+        if (e is RemoteEnumerationException.AuthFailed) {
+          // 登录失败（凭据失效 / 无权限）：清空该音源的缓存数据，避免继续展示无法播放的旧列表
+          removedUrls += applyDiff("smb:${smb.server}:${smb.share}", SourceType.SMB.ordinal, emptyList())
+        }
         continue
       }
       removedUrls += applyDiff("smb:${smb.server}:${smb.share}", SourceType.SMB.ordinal, songs)
@@ -149,7 +195,7 @@ class RemoteSongLookup @Inject constructor(
 
     // 同步清理播放队列中已不存在于任何音源的歌曲
     purgeRemovedFromQueue(removedUrls)
-    list
+    RemoteRefreshResult.Success(list, failures)
   }
 
   /**
@@ -210,7 +256,7 @@ class RemoteSongLookup @Inject constructor(
    * 对单个远程源做增量合并：
    * - 新增或 size/dateModified 变化的文件 → 重新解析元数据并 upsert 缓存；
    * - 缓存中存在但本次枚举里没有的文件（远端已删除）→ 删除缓存。
-   * 枚举失败（songs 为 null）的源不会进入此方法，因此其缓存被原样保留，不会被误删。
+   * 枚举失败的源**不会进入此方法**（[refresh] 已提前跳过），因此其缓存被原样保留，不会被误删。
    */
   private suspend fun applyDiff(
     sourceKey: String,

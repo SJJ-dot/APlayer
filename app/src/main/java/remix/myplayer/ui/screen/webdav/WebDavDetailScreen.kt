@@ -45,6 +45,7 @@ import com.thegrizzlylabs.sardineandroid.DavResource
 import com.thegrizzlylabs.sardineandroid.impl.OkHttpSardine
 import com.thegrizzlylabs.sardineandroid.impl.SardineException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import remix.myplayer.R
@@ -290,11 +291,13 @@ fun WebDavDetailScreen(webDav: WebDav, pickMode: Boolean = false) {
             .height(44.dp)
             .background(color = LocalTheme.current.primary, shape = RoundedCornerShape(22.dp))
             .clickableWithoutRipple {
-              webDavVM.updateRootDir(webDav, currentUrl)
-              MessageNotifier.show(R.string.music_folder_set)
-              // 立即按新目录刷新远程曲库
-              libraryVM.fetchMedia()
-              nav.popBackStack()
+              scope.launch {
+                // 先落库新的导入目录，再按新目录重新枚举远程曲库（音源配置变化）
+                webDavVM.updateRootDir(webDav, currentUrl)
+                MessageNotifier.show(R.string.music_folder_set)
+                libraryVM.fetchMedia(refreshRemote = true)
+                nav.popBackStack()
+              }
             },
           contentAlignment = Alignment.Center
         ) {
@@ -320,8 +323,8 @@ fun WebDavDetailScreen(webDav: WebDav, pickMode: Boolean = false) {
         withContext(Dispatchers.IO) {
           sardine.delete(webDav.generateUrl(target.path))
         }
-        // 同步刷新曲库（会清理该文件的缓存）
-        libraryVM.fetchMedia()
+        // 用户主动删除远端文件：重新枚举以清理该文件的缓存
+        libraryVM.fetchMedia(refreshRemote = true)
         refreshTrigger++
       }
     }

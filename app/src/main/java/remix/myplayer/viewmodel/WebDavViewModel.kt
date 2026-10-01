@@ -111,8 +111,13 @@ class WebDavViewModel @Inject constructor(
     webDavRepository.insertOrReplace(webDav)
   }
 
-  /** 保存导入根目录，并把浏览位置重置到该目录 */
-  fun updateRootDir(webDav: WebDav, rootUrl: String) = viewModelScope.launch {
+  /**
+   * 保存导入根目录，并把浏览位置重置到该目录。
+   *
+   * 为 suspend 方法：调用方需在本方法**返回后**再刷新曲库，确保后台枚举读到的是新 rootDir，
+   * 否则会按旧目录做 diff，导致新目录下的歌曲无法立即导入。
+   */
+  suspend fun updateRootDir(webDav: WebDav, rootUrl: String) {
     webDavRepository.insertOrReplace(
       webDav.copy(rootDir = rootUrl, lastUrl = rootUrl).also { it.id = webDav.id }
     )

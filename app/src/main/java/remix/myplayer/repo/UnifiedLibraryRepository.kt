@@ -1,9 +1,11 @@
 package remix.myplayer.repo
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import remix.myplayer.data.model.audio.Song
 import remix.myplayer.data.prefs.SettingPrefs
+import remix.myplayer.repo.source.RemoteRefreshResult
 import remix.myplayer.repo.source.RemoteSongLookup
 import javax.inject.Inject
 
@@ -45,12 +47,20 @@ class UnifiedLibraryRepository @Inject constructor(
 
   /**
    * 后台增量刷新远程歌曲（枚举 + 仅对新增/变更文件解析元数据 + 清理已删除项）。
-   * 返回刷新后的完整远程歌曲列表，供 UI 合并刷新。
+   * 返回刷新结果：成功时带回完整远程歌曲列表与各失败音源的原因；失败时不修改任何数据，
+   * 由调用方保留原列表并提示原因。
    */
-  suspend fun refreshRemote(): List<Song> = withContext(Dispatchers.IO) {
-    val result = ArrayList<Song>()
-    runCatching { result.addAll(remoteLookup.refresh()) }
-    result.distinctBy { it.id }
+  suspend fun refreshRemote(): RemoteRefreshResult = withContext(Dispatchers.IO) {
+    try {
+      when (val result = remoteLookup.refresh()) {
+        is RemoteRefreshResult.Success -> result.copy(songs = result.songs.distinctBy { it.id })
+        is RemoteRefreshResult.Failure -> result
+      }
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      RemoteRefreshResult.Failure(e)
+    }
   }
 
   /**
