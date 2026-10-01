@@ -8,8 +8,10 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.DrawerValue
@@ -102,6 +104,7 @@ fun HomeScreen() {
         .fillMaxSize()
         .nestedScroll(scrollBehavior.nestedScrollConnection),
       containerColor = LocalTheme.current.libraryBackground,
+      contentWindowInsets = WindowInsets.systemBars,
       floatingActionButton = {
         val selectLibrary by remember(libraries) {
           derivedStateOf {
@@ -214,41 +217,43 @@ private fun HomeContent(
       )
       .background(LocalTheme.current.libraryBackground)
   ) {
-    ScrollableTabRow(
-      selectedTabIndex = pagerState.currentPage,
-      indicator = { tabPositions ->
-        TabRowDefaults.SecondaryIndicator(
-          modifier = Modifier.tabIndicatorOffset(tabPositions[pagerState.currentPage]),
-          height = 3.dp,
-          color = LocalTheme.current.primaryReverse
-        )
-      },
-      edgePadding = 0.dp,
-      containerColor = LocalTheme.current.primary
-    ) {
-      libraries.forEachIndexed { index, library ->
-        val theme = LocalTheme.current
-        var lastClickTime by remember { mutableLongStateOf(0L) }
-
-        Tab(
-          selected = pagerState.currentPage == index,
-          onClick = {
-            val currentTime = System.currentTimeMillis()
-            if (currentTime - lastClickTime < 300) {
-              if (library.tag == Library.TAG_SONG) {
-                scope.launch { scrollToCurrentEvent.emit(Unit) }
-              }
-              return@Tab
-            }
-            lastClickTime = currentTime
-            scope.launch { pagerState.animateScrollToPage(index) }
-          },
-          text = { Text(stringResource(library.stringRes), maxLines = 1) },
-          selectedContentColor = theme.primaryReverse,
-          unselectedContentColor = colorResource(
-            if (theme.isPrimaryCloseToWhite) R.color.dark_normal_tab_text_color else R.color.light_normal_tab_text_color
+    if (libraries.size > 1) {
+      ScrollableTabRow(
+        selectedTabIndex = pagerState.currentPage,
+        indicator = { tabPositions ->
+          TabRowDefaults.SecondaryIndicator(
+            modifier = Modifier.tabIndicatorOffset(tabPositions[pagerState.currentPage]),
+            height = 3.dp,
+            color = LocalTheme.current.primaryReverse
           )
-        )
+        },
+        edgePadding = 0.dp,
+        containerColor = LocalTheme.current.primary
+      ) {
+        libraries.forEachIndexed { index, library ->
+          val theme = LocalTheme.current
+          var lastClickTime by remember { mutableLongStateOf(0L) }
+
+          Tab(
+            selected = pagerState.currentPage == index,
+            onClick = {
+              val currentTime = System.currentTimeMillis()
+              if (currentTime - lastClickTime < 300) {
+                if (library.tag == Library.TAG_SONG) {
+                  scope.launch { scrollToCurrentEvent.emit(Unit) }
+                }
+                return@Tab
+              }
+              lastClickTime = currentTime
+              scope.launch { pagerState.animateScrollToPage(index) }
+            },
+            text = { Text(stringResource(library.stringRes), maxLines = 1) },
+            selectedContentColor = theme.primaryReverse,
+            unselectedContentColor = colorResource(
+              if (theme.isPrimaryCloseToWhite) R.color.dark_normal_tab_text_color else R.color.light_normal_tab_text_color
+            )
+          )
+        }
       }
     }
 
